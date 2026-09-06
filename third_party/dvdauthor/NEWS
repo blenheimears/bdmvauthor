@@ -1,0 +1,4 @@
+BDMV Author 0.1.99 fixes UCRT64 spumux FriBidi paragraph-direction typing and replaces JacoSub bzero() with portable memset(); see BDMVAUTHOR_WINDOWS_PORT.md.
+BDMV Author 0.1.97 initializes the spumux subtitle palette accumulator for UCRT64 GCC 16 warning-clean/correct operation; see BDMVAUTHOR_WINDOWS_PORT.md.
+BDMV Author 0.1.96 adds the UCRT64 VOB flush fix and warning-clean follow-up documented in BDMVAUTHOR_WINDOWS_PORT.md.
+BDMV Author 0.1.95 carries this upstream snapshot with the initial native-Windows/UCRT64 portability changes documented there.

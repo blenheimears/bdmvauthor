@@ -1,0 +1,71 @@
+<refentry id="dvdunauthor">
+  <refentryinfo>
+    <address>
+      &dhemail;
+    </address>
+    <author>
+      &dhfirstname;
+      &dhsurname;
+    </author>
+    <copyright>
+      <year>2003</year>
+      <holder>&dhusername;</holder>
+    </copyright>
+    &dhdate;
+  </refentryinfo>
+  <refmeta>
+    <refentrytitle>dvdunauthor</refentrytitle>
+    <manvolnum>1</manvolnum>
+  </refmeta>
+  <refnamediv>
+    <refname>dvdunauthor</refname>
+	<refpurpose>
+	Decodes DVD-Video file structure
+	</refpurpose>
+</refnamediv>
+<refsynopsisdiv>
+	<cmdsynopsis>
+	<command>dvdunauthor</command>
+<arg>path</arg>
+	</cmdsynopsis>
+</refsynopsisdiv>
+<refsect1>
+	<title>DESCRIPTION</title>
+	<para>
+	<command>dvdunauthor</command> decodes the specified DVD-Video directory structure,
+	putting into the current directory an XML control file and corresponding MPEG-2
+	files (with a .vob extension) that <command>dvdauthor</command> can (hopefully)
+	interpret to recreate the DVD-Video directory structure.
+	</para>
+</refsect1>
+<refsect1>
+	<title>USAGE</title>
+	<para>
+	<command>dvdunauthor</command> path
+	</para>
+</refsect1>
+<refsect1>
+	<title>CAVEATS</title>
+	<para>
+	None.
+	</para>
+</refsect1>
+<refsect1>
+	<title>BUGS</title>
+	<para>
+	Depends on libdvdread to decode the DVD-Video structure and to report any
+	errors trying to do so. But libdvdread will sometimes just exit without
+	reporting any error.
+	</para>
+</refsect1>
+<refsect1>
+	<title>AUTHOR</title>
+	<para>
+	<author>
+		<firstname>Marc</firstname>
+		<surname>Leeman</surname>
+		<contrib>This manual page was written by Marc Leeman &#60;marc.leeman@gmail.com&#62;, for the Debian GNU/Linux system (but may be used by others).</contrib>
+	</author>
+	</para>
+</refsect1>
+</refentry>
