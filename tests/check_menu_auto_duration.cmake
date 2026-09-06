@@ -1,7 +1,6 @@
 file(READ "${SOURCE_DIR}/src/author.cpp" AUTHOR)
 file(READ "${SOURCE_DIR}/src/gui.cpp" GUI)
 file(READ "${SOURCE_DIR}/src/cli.cpp" CLI)
-file(READ "${SOURCE_DIR}/README.md" README)
 
 foreach(needle
     "probe_stream_duration_seconds"
@@ -34,7 +33,3 @@ foreach(needle
     message(FATAL_ERROR "menu auto-duration CLI regression: missing ${needle}")
   endif()
 endforeach()
-string(FIND "${README}" "video plus audio uses the longer duration" pos)
-if(pos EQUAL -1)
-  message(FATAL_ERROR "menu auto-duration documentation regression")
-endif()

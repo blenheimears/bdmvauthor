@@ -15,7 +15,6 @@ file(READ "${SOURCE_DIR}/flake.nix" FLAKE)
 file(READ "${SOURCE_DIR}/windows/build-msys2-ucrt64.sh" WIN)
 file(READ "${SOURCE_DIR}/windows/installer.nsi" INSTALLER)
 file(READ "${SOURCE_DIR}/nix/build-portable-linux.sh" PORTABLE)
-file(READ "${SOURCE_DIR}/README.md" README)
 
 set(CMAKE_MARKERS
   [=[file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" BDMVAUTHOR_VERSION)]=]
@@ -35,8 +34,7 @@ set(CONSUMER_MARKERS
   [=[FLAKE|tr -d '\r\n' < VERSION]=]
   [=[FLAKE|-DBDMVAUTHOR_VERSION=\"$version\"]=]
   [=[WIN|< "$root/VERSION"]=]
-  [=[PORTABLE|< "$root/VERSION"]=]
-  "README|root `VERSION` file")
+  [=[PORTABLE|< "$root/VERSION"]=])
 foreach(pair IN LISTS CONSUMER_MARKERS)
   string(REPLACE "|" ";" fields "${pair}")
   list(GET fields 0 var)

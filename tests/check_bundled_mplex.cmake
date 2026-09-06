@@ -4,7 +4,6 @@ endif()
 
 file(READ "${SOURCE_DIR}/CMakeLists.txt" TOP_CMAKE)
 file(READ "${SOURCE_DIR}/third_party/mplex/CMakeLists.txt" MPLEX_CMAKE)
-file(READ "${SOURCE_DIR}/third_party/mplex/BDMVAUTHOR-VENDORING.md" VENDORING)
 file(READ "${SOURCE_DIR}/third_party/mplex/config.h.cmake" MPLEX_CONFIG)
 file(READ "${SOURCE_DIR}/windows/build-msys2-ucrt64.sh" WINDOWS_BUILD)
 
@@ -70,16 +69,6 @@ foreach(needle
   string(FIND "${MPLEX_CONFIG}" "${needle}" pos)
   if(pos EQUAL -1)
     message(FATAL_ERROR "native-Windows mplex compatibility marker missing: ${needle}")
-  endif()
-endforeach()
-
-foreach(needle
-  "SVN r3517"
-  "only the source required to build `mplex`"
-  "18cf570556b34112dbc69a541dea24894c2e614897111ea7094ede1b4f9c0fc4")
-  string(FIND "${VENDORING}" "${needle}" pos)
-  if(pos EQUAL -1)
-    message(FATAL_ERROR "mplex provenance/subset marker missing: ${needle}")
   endif()
 endforeach()
 

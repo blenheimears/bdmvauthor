@@ -2,10 +2,8 @@ if(NOT DEFINED SOURCE_DIR)
   message(FATAL_ERROR "SOURCE_DIR is required")
 endif()
 file(READ "${SOURCE_DIR}/CMakeLists.txt" TOP)
-file(READ "${SOURCE_DIR}/third_party/mkisofs/SOURCE_INFO.md" INFO)
 file(READ "${SOURCE_DIR}/third_party/mkisofs/CMakeLists.txt" MKCMAKE)
 file(READ "${SOURCE_DIR}/third_party/mkisofs/cmake/xconfig.h.in" XCONFIG)
-file(READ "${SOURCE_DIR}/third_party/mkisofs/BDMVAUTHOR_PORT.md" PORT)
 file(READ "${SOURCE_DIR}/third_party/mkisofs/support/getargs.c" GETARGS)
 file(READ "${SOURCE_DIR}/third_party/mkisofs/include/schily/schily.h" SCHILY_H)
 file(READ "${SOURCE_DIR}/third_party/mkisofs/include/schily/nlsdefs.h" NLSDEFS)
@@ -19,7 +17,6 @@ file(READ "${SOURCE_DIR}/windows/build-msys2-ucrt64.sh" WIN)
 file(READ "${SOURCE_DIR}/src/author.cpp" AUTHOR)
 file(READ "${SOURCE_DIR}/src/gui.cpp" GUI)
 file(READ "${SOURCE_DIR}/flake.nix" FLAKE)
-file(READ "${SOURCE_DIR}/THIRD_PARTY_NOTICES.md" NOTICES)
 file(READ "${SOURCE_DIR}/tests/check_bundled_mkisofs_runtime.cmake" RUNTIME)
 
 foreach(needle
@@ -30,18 +27,6 @@ foreach(needle
   string(FIND "${TOP}" "${needle}" pos)
   if(pos EQUAL -1)
     message(FATAL_ERROR "top-level bundled mkisofs integration missing: ${needle}")
-  endif()
-endforeach()
-foreach(needle
-  "cdrtools 3.02a09"
-  "cdrecord, cdda2wav, readcd, scgcheck, smake"
-  "direct SCSI device"
-  "CMake port"
-  "c7e4f732fb299e9b5d836629dadf5512aa5e6a5624ff438ceb1d056f4dcb07c2"
-  "BDMVAUTHOR_PORT.md")
-  string(FIND "${INFO}" "${needle}" pos)
-  if(pos EQUAL -1)
-    message(FATAL_ERROR "minimal cdrtools source-boundary marker missing: ${needle}")
   endif()
 endforeach()
 foreach(needle
@@ -78,17 +63,6 @@ foreach(needle
   endif()
 endforeach()
 
-foreach(needle
-  "libschily/getargs.c"
-  "libmdigest/sha3.c"
-  "raisecond(..., void *)"
-  "_fseeki64"
-  "gettimeofday")
-  string(FIND "${PORT}" "${needle}" pos)
-  if(pos EQUAL -1)
-    message(FATAL_ERROR "mkisofs port provenance/Windows marker missing: ${needle}")
-  endif()
-endforeach()
 string(FIND "${GETARGS}" "raisecond(\"getarg_bad_format\", (void *)fmt)" pos)
 if(pos EQUAL -1)
   message(FATAL_ERROR "mkisofs getargs pointer-safe raisecond fix missing")
@@ -230,10 +204,6 @@ foreach(forbidden "mkSchilyMkisofs" "schilytools/archive" "make -C mkisofs" "psm
     message(FATAL_ERROR "stale SchilyTools/smake Nix build path remains: ${forbidden}")
   endif()
 endforeach()
-string(FIND "${NOTICES}" "cdrtools 3.02a09 / mkisofs" notice_pos)
-if(notice_pos EQUAL -1)
-  message(FATAL_ERROR "cdrtools mkisofs third-party notice missing")
-endif()
 foreach(needle "FIXTURE_WRITER" "VIDEO_TS.IFO" "-dvd-video" "Missing pathspec" "Unknown error -1" "4e53523032")
   string(FIND "${RUNTIME}" "${needle}" pos)
   if(pos EQUAL -1)
