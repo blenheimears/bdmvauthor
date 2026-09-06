@@ -1,0 +1,13 @@
+BDMV Author license notice
+==========================
+
+The Apache License 2.0 text below applies to BDMV Author itself only.
+
+This installer also contains third-party tools and runtime components that are
+licensed separately under their respective licenses. They are not relicensed
+under the Apache License by BDMV Author. See THIRD_PARTY_NOTICES.md and the
+licenses directory installed with BDMV Author for component-specific notices
+and license texts.
+
+BDMV Author - Apache License 2.0
+===============================

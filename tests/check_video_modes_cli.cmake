@@ -1,0 +1,46 @@
+function(run_mode_case name expect_mode_error)
+  execute_process(
+    COMMAND "${CLI}" ${ARGN} -o "${WORK_DIR}/${name}.iso" "${WORK_DIR}/${name}-missing-input.mkv"
+    RESULT_VARIABLE rv OUTPUT_VARIABLE out ERROR_VARIABLE err)
+  if(rv EQUAL 0)
+    message(FATAL_ERROR "${name}: command unexpectedly succeeded")
+  endif()
+  set(text "${out}${err}")
+  string(FIND "${text}" "resolution/aspect/frame-rate selection is not legal" mode_pos)
+  if(expect_mode_error)
+    if(mode_pos EQUAL -1)
+      message(FATAL_ERROR "${name}: expected video-mode rejection, got: ${text}")
+    endif()
+  else()
+    if(NOT mode_pos EQUAL -1)
+      message(FATAL_ERROR "${name}: legal video mode was rejected: ${text}")
+    endif()
+    string(FIND "${text}" "missing title source" missing_pos)
+    if(missing_pos EQUAL -1)
+      message(FATAL_ERROR "${name}: expected validation to advance to missing source, got: ${text}")
+    endif()
+  endif()
+endfunction()
+
+run_mode_case(bd_sd_43 FALSE --target bluray --title-resolution 720x480 --title-aspect 4:3 --title-frame-rate 59.94i)
+run_mode_case(bd_hd_43 TRUE --target bluray --title-resolution 1920x1080 --title-aspect 4:3 --title-frame-rate 23.976p)
+run_mode_case(bd_1440 FALSE --target bluray --title-resolution 1440x1080 --title-aspect 16:9 --title-frame-rate 24p)
+run_mode_case(bd_720p50 FALSE --target bluray --title-resolution 1280x720 --title-aspect 16:9 --title-frame-rate 50p)
+run_mode_case(bd_sd_film TRUE --target bluray --title-resolution 720x480 --title-aspect 16:9 --title-frame-rate 23.976p)
+run_mode_case(uhd_1080 FALSE --target uhd --title-resolution 1920x1080 --title-aspect 16:9 --title-frame-rate 60p)
+run_mode_case(uhd_43 TRUE --target uhd --title-resolution 3840x2160 --title-aspect 4:3 --title-frame-rate 24p)
+run_mode_case(dvd_half_43 FALSE --target dvd --title-resolution 352x240 --title-aspect 4:3 --title-frame-rate film-dvd)
+run_mode_case(dvd_half_169 TRUE --target dvd --title-resolution 352x240 --title-aspect 16:9 --title-frame-rate film-dvd)
+run_mode_case(dvd_pal_704_43 FALSE --target dvd --menu-resolution 720x576 --title-resolution 704x576 --title-aspect 4:3 --title-frame-rate pal-dvd)
+
+execute_process(
+  COMMAND "${CLI}" --target bluray --menu-resolution 1920x1080 --menu-aspect 4:3
+          -o "${WORK_DIR}/bad-menu.iso" "${WORK_DIR}/bad-menu-missing.mkv"
+  RESULT_VARIABLE menu_rv OUTPUT_VARIABLE menu_out ERROR_VARIABLE menu_err)
+set(menu_text "${menu_out}${menu_err}")
+string(FIND "${menu_text}" "menu resolution/aspect/frame-rate selection is not legal" menu_pos)
+if(menu_pos EQUAL -1)
+  message(FATAL_ERROR "illegal 4:3 1080p Blu-ray menu was not rejected: ${menu_text}")
+endif()
+
+message(STATUS "resolution/aspect CLI validation ok")

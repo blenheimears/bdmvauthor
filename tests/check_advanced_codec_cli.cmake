@@ -1,0 +1,31 @@
+if(NOT DEFINED CLI OR NOT DEFINED WORK_DIR)
+  message(FATAL_ERROR "CLI/WORK_DIR not supplied")
+endif()
+set(dummy "${WORK_DIR}/advanced-codec-cli-dummy.mp4")
+set(image "${WORK_DIR}/advanced-codec-cli-output.iso")
+file(WRITE "${dummy}" "")
+
+function(expect_rejected label needle)
+  execute_process(COMMAND "${CLI}" -o "${image}" ${ARGN} "${dummy}" RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
+  set(text "${out}${err}")
+  string(FIND "${text}" "${needle}" pos)
+  if(pos EQUAL -1)
+    message(FATAL_ERROR "${label} did not reject as expected: ${text}")
+  endif()
+endfunction()
+
+expect_rejected("advanced GOP override" "controls a disc-spec parameter" --video-option keyint=50)
+expect_rejected("advanced sample-rate override" "controls a disc-spec parameter" --audio-option ar=44100)
+expect_rejected("x264 B-frame overflow" "bframes must be 0..3" --video-option bframes=4)
+
+execute_process(COMMAND "${CLI}" -o "${image}" --video-option aq-mode=2 --audio-option drc_scale=0.8 "${dummy}"
+  RESULT_VARIABLE ok_rc OUTPUT_VARIABLE ok_out ERROR_VARIABLE ok_err)
+set(ok_text "${ok_out}${ok_err}")
+string(FIND "${ok_text}" "ffprobe could not inspect title streams" ok_probe)
+string(FIND "${ok_text}" "missing title source" ok_missing)
+if(ok_probe EQUAL -1 AND ok_missing EQUAL -1)
+  message(FATAL_ERROR "legal advanced options did not survive option validation: ${ok_text}")
+endif()
+
+file(REMOVE "${dummy}" "${image}")
+message(STATUS "advanced codec CLI validation checks ok")
