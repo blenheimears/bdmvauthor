@@ -4,6 +4,8 @@ BDMV Author is a native, Java-free authoring application for creating **Blu-ray*
 
 The program is designed to take ordinary media files, reuse already-compliant streams when possible, encode or convert streams when necessary, build the disc navigation structures, and produce a finished ISO/UDF disc image suitable for testing, archiving, or burning with separate disc-writing software.
 
+Please note: This program is experimental and has not been widely-tested on real Blu-ray players.
+
 ## Features
 
 - **Blu-ray, Ultra HD Blu-ray, and DVD-Video authoring** from a single application.
