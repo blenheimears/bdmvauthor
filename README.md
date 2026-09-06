@@ -45,6 +45,10 @@ UHD subtitle graphics use the 1080-line subtitle plane, so subtitle sizing remai
 
 DVD-Video authoring supports NTSC, PAL, and Film-DVD timing profiles, MPEG-2 video, DVD-compatible audio, subtitles, chapters, menus, and UDF 1.02/ISO image creation.
 
+## Note about BDXL media
+
+Please note that most Blu-ray players (even Ultra HD) will not play 100GB BD-R (AKA BDXL). 100GB UHD target is available if you want to try it, but I recommend you use 50GB BD-R DL instead. You can also use 25GB single-layer BD-R for UHD. It's not officially part of the UHD BD specification, but most players will play it.
+
 ## Basic GUI workflow
 
 1. Start `bdmvauthor`.
