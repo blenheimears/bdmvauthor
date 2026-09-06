@@ -1,0 +1,4 @@
+#include <windows.h>
+
+#define IDI_BDMVAUTHOR 101
+IDI_BDMVAUTHOR ICON "@BDMVAUTHOR_WINDOWS_ICON@"

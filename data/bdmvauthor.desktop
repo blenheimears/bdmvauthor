@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=BDMV Author
+Comment=Author Blu-ray, Ultra HD Blu-ray, and DVD-Video images
+Exec=bdmvauthor
+Icon=bdmvauthor
+Terminal=false
+Categories=AudioVideo;Video;
+StartupWMClass=bdmvauthor
