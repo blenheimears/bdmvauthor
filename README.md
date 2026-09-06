@@ -198,6 +198,11 @@ To package a different FFmpeg build, provide a directory containing both `ffmpeg
 ./windows/build-msys2-ucrt64.sh --ffmpeg-dir 'C:\path\to\ffmpeg\bin'
 ```
 
+To build a custom ffmpeg with only the needed codecs / features:
+```sh
+./configure --enable-gpl --enable-small --disable-debug --disable-doc --disable-ffplay --enable-ffmpeg --enable-ffprobe --disable-network --disable-protocols --enable-protocol='file,pipe' --disable-indevs --enable-indev=lavfi --disable-outdevs --disable-libbluray --disable-libdvdnav --disable-libdvdread --disable-libcdio --enable-libx264 --enable-libx265 --enable-libzimg --disable-encoders --enable-encoder='libx264,libx265,mpeg2video,ac3,dca,truehd,pcm_s16le,pcm_s24le,pcm_s16be,pcm_s24be,png,rawvideo,srt' --disable-muxers --enable-muxer='h264,hevc,mpeg2video,ac3,eac3,dts,truehd,wav,s16be,s24be,srt,sup,rawvideo,yuv4mpegpipe,image2,null,vc1' --disable-filters --enable-filter='buffer,buffersink,abuffer,abuffersink,null,anull,format,aformat,scale,pad,setsar,fps,bwdif,tinterlace,setfield,tpad,overlay,setparams,colorspace,zscale,tonemap,color,anullsrc,apad,aresample'
+```
+
 The override is strict: if the supplied executables are missing or fail their self-test, the build stops rather than silently falling back to the MSYS2 FFmpeg package.
 
 ### Generic Linux portable build
