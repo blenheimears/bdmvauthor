@@ -1,0 +1,6 @@
+udf25mkiso
+Copyright 2026 udf25mkiso contributors
+
+The UDF layout and selected descriptor-writing techniques are informed by
+and adapted from tsMuxer, Copyright (c) 2009-2025 SmartLabs LLC and
+contributors, licensed under the Apache License, Version 2.0.
