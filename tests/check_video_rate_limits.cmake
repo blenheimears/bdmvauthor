@@ -74,8 +74,8 @@ foreach(needle
   "return std::max(1, encoding.video_max_bitrate_kbps);"
   "audio-derived ceiling disabled"
   " -f 8 -r \" << std::max(1, mux_bitrate_kbps)"
-  "bdmvauthor-video-cache-v13"
-  "bdmvauthor-menu-video-cache-v4")
+  "bdmvauthor-video-cache-v14"
+  "bdmvauthor-menu-video-cache-v5")
   string(FIND "${AUTHOR}" "${needle}" pos)
   if(pos EQUAL -1)
     message(FATAL_ERROR "video rate-limit authoring regression: missing ${needle}")

@@ -50,7 +50,7 @@ foreach(needle
   "shq_s(tools.x264)"
   "shq_s(tools.x265)"
   "tools.h264_provider==VideoEncoderProvider::Ffmpeg"
-  "bdmvauthor-video-cache-v13")
+  "bdmvauthor-video-cache-v14")
   string(FIND "${AUTHOR}" "${needle}" pos)
   if(pos EQUAL -1)
     message(FATAL_ERROR "missing encoder-provider author marker: ${needle}")

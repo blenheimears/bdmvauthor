@@ -14,15 +14,16 @@ foreach(needle
   "Measured encoded audio track "
   "video peak budget: "
   "peakBitrateLimitKbps="
-  "bdmvauthor-video-cache-v13"
-  "bdmvauthor-menu-video-cache-v4"
+  "bdmvauthor-video-cache-v14"
+  "bdmvauthor-menu-video-cache-v5"
   "bdmvauthor-audio-cache-v7"
   "peakBitrateKbps"
   "combined_transport_limit_kbps"
   "max_transport_bitrate_kbps"
   "e.video_codec == VideoCodec::Hevc ? 86000 : 40000"
-  "peak_bitrate_limit_kbps << \"k -bufsize \" << peak_bitrate_limit_kbps"
-  "vbv-maxrate=\" << peak_bitrate_limit_kbps"
+  "kUhdHevcVbvBufsizeKbits = 100000"
+  "peak_bitrate_limit_kbps << \"k -bufsize \" << kUhdHevcVbvBufsizeKbits"
+  "vbv-maxrate=\" << peak_bitrate_limit_kbps << \":vbv-bufsize=\" << kUhdHevcVbvBufsizeKbits"
   "k -maxrate \" << peak_bitrate_limit_kbps << \"k -bufsize 9781248")
   string(FIND "${AUTHOR}" "${needle}" pos)
   if(pos EQUAL -1)
@@ -75,6 +76,18 @@ foreach(needle
   string(FIND "${AUDIO}" "${needle}" pos)
   if(pos EQUAL -1)
     message(FATAL_ERROR "TrueHD peak measurement regression: missing ${needle}")
+  endif()
+endforeach()
+
+# UHD HEVC CPB size must remain fixed at the UHD ceiling rather than following
+# the audio-derived/effective video peak budget.
+foreach(stale
+  "--vbv-bufsize \" << peak_bitrate_limit_kbps"
+  "-bufsize \" << peak_bitrate_limit_kbps << \"k\"\n                        \" -profile:v main10"
+  ":vbv-bufsize=\" << peak_bitrate_limit_kbps")
+  string(FIND "${AUTHOR}" "${stale}" stale_pos)
+  if(NOT stale_pos EQUAL -1)
+    message(FATAL_ERROR "UHD HEVC VBV buffer is still coupled to video maxrate: ${stale}")
   endif()
 endforeach()
 

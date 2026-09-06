@@ -53,6 +53,8 @@ namespace bdmvauthor {
 namespace {
 namespace fs = std::filesystem;
 
+constexpr int kUhdHevcVbvBufsizeKbits = 100000;
+
 std::atomic<const CancellationCallback*> active_cancellation_callback{nullptr};
 
 bool authoring_cancel_requested() {
@@ -306,7 +308,7 @@ std::string timing_cache_text(const VideoTimingMode& t) {
 
 std::string video_cache_key(const MediaFingerprint& fp,const EncodingProfile& e,const Project& p,
                             const VideoTimingMode& timing, const ToolPaths& tools, int peak_bitrate_limit_kbps) {
-    std::ostringstream k;k<<"bdmvauthor-video-cache-v13\n"<<fp.canonical()<<"\ncodec="<<video_codec_name(e.video_codec)
+    std::ostringstream k;k<<"bdmvauthor-video-cache-v14\n"<<fp.canonical()<<"\ncodec="<<video_codec_name(e.video_codec)
       <<"\nbitrate="<<e.video_bitrate_kbps<<"\nminrate="<<e.video_min_bitrate_kbps<<"\nmaxrate="<<e.video_max_bitrate_kbps<<"\nx264Preset="<<e.x264_preset<<"\nx265Preset="<<e.x265_preset<<"\ntwoPass="<<(e.two_pass?1:0)
       <<"\nframeTiming="<<timing_cache_text(timing)<<"\ntarget="<<static_cast<int>(p.target)
       <<"\nkeyframeInterval="<<e.keyframe_interval_frames
@@ -329,7 +331,7 @@ std::string menu_video_cache_key(const fs::path& input, const fs::path& overlay,
                                  bool source_interlaced, bool still, double seconds, const Rgba& background_color,
                                  bool loop_media, int peak_bitrate_limit_kbps) {
     std::ostringstream k;
-    k << "bdmvauthor-menu-video-cache-v4\n";
+    k << "bdmvauthor-menu-video-cache-v5\n";
     if (input.empty()) k << "input=generated-color\n";
     else k << "input=" << fingerprint_media_file(input).canonical() << "\n";
     if (overlay.empty()) k << "overlay=none\n";
@@ -3575,7 +3577,7 @@ std::string x265_options(const EncodingProfile& e, DiscTarget target, const Vide
     const int keyint = effective_keyframe_interval_frames(e,target,timing);
     x << " --y4m --preset " << e.x265_preset
       << " --profile main10 --level-idc 5.1 --high-tier --uhd-bd --aud --repeat-headers --hrd"
-         " --vbv-maxrate " << peak_bitrate_limit_kbps << " --vbv-bufsize " << peak_bitrate_limit_kbps << " --keyint " << keyint << " --min-keyint 1"
+         " --vbv-maxrate " << peak_bitrate_limit_kbps << " --vbv-bufsize " << kUhdHevcVbvBufsizeKbits << " --keyint " << keyint << " --min-keyint 1"
       << " --output-depth 10 --bitrate " << e.video_bitrate_kbps << " --fps " << timing.frame_rate;
     for (const auto& option : parse_advanced_codec_options(e.x265_advanced_options)) {
         x << " --" << option.name;
@@ -3710,11 +3712,11 @@ std::string encode_video(const ToolPaths& tools, const fs::path& input, const fs
                 std::ostringstream opts;
                 opts << "-c:v libx265 -preset " << e.x265_preset
                      << " -b:v " << e.video_bitrate_kbps << "k -minrate " << e.video_min_bitrate_kbps
-                     << "k -maxrate " << peak_bitrate_limit_kbps << "k -bufsize " << peak_bitrate_limit_kbps << "k"
+                     << "k -maxrate " << peak_bitrate_limit_kbps << "k -bufsize " << kUhdHevcVbvBufsizeKbits << "k"
                         " -profile:v main10 -level:v 5.1 -pix_fmt yuv420p10le ";
                 std::ostringstream params;
                 const int keyint = effective_keyframe_interval_frames(e,p.target,timing);
-                params << "uhd-bd=1:aud=1:repeat-headers=1:hrd=1:vbv-maxrate=" << peak_bitrate_limit_kbps << ":vbv-bufsize=" << peak_bitrate_limit_kbps
+                params << "uhd-bd=1:aud=1:repeat-headers=1:hrd=1:vbv-maxrate=" << peak_bitrate_limit_kbps << ":vbv-bufsize=" << kUhdHevcVbvBufsizeKbits
                           << ":keyint=" << keyint << ":min-keyint=1:" << color_plan.x265_params
                        << x265_private_params(e.x265_advanced_options);
                 if (pass > 0) params << ":pass=" << pass << ":stats=" << stats.string();

@@ -4,7 +4,7 @@ file(READ "${SOURCE_DIR}/src/cli.cpp" C)
 file(READ "${SOURCE_DIR}/src/project_file.cpp" P)
 file(READ "${SOURCE_DIR}/include/bdmvauthor/model.hpp" M)
 foreach(needle
-  "bdmvauthor-video-cache-v13"
+  "bdmvauthor-video-cache-v14"
   "bdmvauthor-audio-cache-v7"
   "video_bitrate_kbps"
   "peakBitrateLimitKbps="
@@ -70,7 +70,7 @@ endif()
 # rendered video inputs plus encoding/timing/duration, while source-backed menu
 # audio is cached separately. DVD and Blu-ray/UHD must both use these paths.
 foreach(needle
-  "bdmvauthor-menu-video-cache-v4"
+  "bdmvauthor-menu-video-cache-v5"
   "bdmvauthor-menu-audio-cache-v2"
   "bdmvauthor-dvd-menu-audio-cache-v2"
   "encode_cache_root / \"menu-video\""
