@@ -53,3 +53,5 @@ endif()
 set_target_properties(mplex PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
+
+install(TARGETS mplex RUNTIME DESTINATION bin)
