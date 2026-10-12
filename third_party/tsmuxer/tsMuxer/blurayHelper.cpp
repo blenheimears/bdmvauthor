@@ -1,4 +1,5 @@
 #include "blurayHelper.h"
+#include "preloadedIgsWindow.h"
 
 #include <fs/directory.h>
 #include <fs/systemlog.h>
@@ -478,9 +479,17 @@ bool BlurayHelper::createCLPIFile(TSMuxer* muxer, int clpiNum, bool doLog) const
                 clpiParser.TS_recording_rate = MAX_MAIN_MUXER_RATE / 8;
         }
 
-        clpiParser.number_of_source_packets = packetCount[i];
+        // CLPI SequenceInfo must use the *same* PCR PID as the TS Program Map.
+    // This differs between main A/V clips and standalone Interactive Graphics.
+    clpiParser.sequence_pcr_pid = muxer->getPCRPid();
+    if (clpiParser.sequence_pcr_pid == 0 || clpiParser.sequence_pcr_pid >= 0x1fff)
+        THROW(ERR_COMMON, "Invalid PCR PID in PMT while composing CLPI")
+
+    clpiParser.number_of_source_packets = packetCount[i];
         clpiParser.presentation_start_time = static_cast<uint32_t>(firstPts[i] / 2);
-        clpiParser.presentation_end_time = static_cast<uint32_t>(lastPts[i] / 2);
+        clpiParser.presentation_end_time = preloadedIG
+            ? preloadedIGEnd45k(firstPts[i], lastPts[i])
+            : static_cast<uint32_t>(lastPts[i] / 2);
         clpiParser.m_clpiNum = i;
 
         int fileLen = clpiParser.compose(clpiBuffer, CLPI_BUFFER_SIZE);
@@ -642,7 +651,8 @@ bool BlurayHelper::createMPLSFile(TSMuxer* mainMuxer, TSMuxer* subMuxer, int aut
             if (!subFirstPts.empty() && !subLastPts.empty())
             {
                 mplsParser.m_preloadIGSubPathIN_time = static_cast<uint32_t>(*subFirstPts.begin() / 2);
-                mplsParser.m_preloadIGSubPathOUT_time = static_cast<uint32_t>(*subLastPts.rbegin() / 2);
+                mplsParser.m_preloadIGSubPathOUT_time = preloadedIGEnd45k(
+                    *subFirstPts.begin(), *subLastPts.rbegin());
             }
             for (const auto& [pid, si] : pidListMVC)
             {

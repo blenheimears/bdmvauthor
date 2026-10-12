@@ -424,6 +424,7 @@ class CLPIParser
           format_identifier(),
           presentation_start_time(0),
           presentation_end_time(0),
+          sequence_pcr_pid(DEFAULT_PCR_PID),
           m_clpiNum(0),
           isDependStream(false)
     {
@@ -449,6 +450,8 @@ class CLPIParser
     char format_identifier[5];
     uint32_t presentation_start_time;
     uint32_t presentation_end_time;
+    // Actual PID carrying transport PCR (as declared in the clip PMT).
+    uint16_t sequence_pcr_pid;
     size_t m_clpiNum;
     std::vector<uint32_t> SPN_extent_start;
     std::vector<int32_t> interleaveInfo;

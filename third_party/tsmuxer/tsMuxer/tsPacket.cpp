@@ -765,7 +765,7 @@ void CLPIParser::composeSequenceInfo(BitStreamWriter& writer) const
         writer.putBits(8, 0);   // offset_STC_id
         // for (int stc_id=offset_STC_id; stc_id < number_of_STC_sequences + offset_STC_id; stc_id++)
         {
-            writer.putBits(16, DEFAULT_PCR_PID);
+            writer.putBits(16, sequence_pcr_pid);  // match PMT and PCR packets, including graphics-only subclips
             writer.putBits(32, 0);  // SPN_STC_start
             writer.putBits(32, presentation_start_time);
             writer.putBits(32, presentation_end_time);

@@ -125,9 +125,19 @@ void MuxerManager::preinitMux(const std::string& outFileName, FileFactory* fileF
             if (fileFactory && fileFactory->isVirtualFS())
                 m_interleave = true;
         }
-        m_subMuxer->setBlockMuxMode(SUB_INTERLEAVE_BLOCKSIZE - MAX_FRAME_SIZE, BLURAY_SECTOR_SIZE);
+        // setBlockMuxMode() also overwrites the muxer's final-flush sector
+        // alignment.  For an ordinary separate subClip (notably preloaded
+        // IGS), using BLURAY_SECTOR_SIZE silently undoes the default 96-sector
+        // M2TS alignment set by TSMuxer::setMuxFormat().  Both the main clip
+        // and its subClip must retain BDCMF segment rounding independently.
+        // True interleaved SSIF/MVC output still requires the historical
+        // 6144-byte block alignment and must not be inflated to 96 sectors.
+        constexpr int kM2tsSegmentSize = 96 * PHYSICAL_SECTOR_SIZE;
+        static_assert(kM2tsSegmentSize % BLURAY_SECTOR_SIZE == 0);
+        const int blockAlignment = m_interleave ? BLURAY_SECTOR_SIZE : kM2tsSegmentSize;
+        m_subMuxer->setBlockMuxMode(SUB_INTERLEAVE_BLOCKSIZE - MAX_FRAME_SIZE, blockAlignment);
         if (m_mainMuxer)
-            m_mainMuxer->setBlockMuxMode(MAIN_INTERLEAVE_BLOCKSIZE - MAX_FRAME_SIZE, BLURAY_SECTOR_SIZE);
+            m_mainMuxer->setBlockMuxMode(MAIN_INTERLEAVE_BLOCKSIZE - MAX_FRAME_SIZE, blockAlignment);
     }
 
     if (m_subMuxer && m_mainMuxer)

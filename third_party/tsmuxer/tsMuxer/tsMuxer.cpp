@@ -1399,6 +1399,11 @@ void TSMuxer::parseMuxOpt(const std::string& opts)
             setSplitSize(static_cast<uint32_t>(strToDouble(prefix.c_str()) * static_cast<double>(coeff)));
             m_computeMuxStats = true;
         }
+        else if (paramPair[0] == "--bdcmf-align")
+        {
+            // Backwards-compatible no-op: all ordinary M2TS/MTS output now
+            // receives 96-sector alignment automatically, with no opt-in.
+        }
         else if (paramPair[0] == "--blu-ray" || paramPair[0] == "--blu-ray-v3" || paramPair[0] == "--avchd")
         {
             m_bluRayMode = true;
@@ -1499,7 +1504,20 @@ void TSMuxer::setMuxFormat(const std::string& format)
     m_outBuf = new uint8_t[m_writeBlockSize + 1024];
     m_frameSize = m_m2tsMode ? 192 : 188;
     if (m_m2tsMode)
-        m_sectorSize = 1024 * 6;
+    {
+        // Every noninterleaved 192-byte-packet transport output is padded to
+        // an integral number of BDCMF's 96-sector (196608-byte) segments by
+        // default.  No --bdcmf-align option or Blu-ray MUXOPT is necessary.
+        // doFlush() pads with legitimate PID 0x1fff packets before ATS/PCR
+        // interpolation and counts them in CLPI source-packet totals.
+        // SSIF uses its own interleaved sector/block policy, set by its caller;
+        // preserve the legacy 6144-byte fallback for standalone SSIF output.
+        constexpr int kLegacySectorAlign = 1024 * 6;
+        constexpr int kBdcmfSegmentAlign = 96 * MuxerManager::PHYSICAL_SECTOR_SIZE;
+        static_assert(kBdcmfSegmentAlign % 192 == 0);
+        static_assert(kBdcmfSegmentAlign % kLegacySectorAlign == 0);
+        m_sectorSize = format == "SSIF" ? kLegacySectorAlign : kBdcmfSegmentAlign;
+    }
 }
 
 bool TSMuxer::isInterleaveMode() const { return m_masterMode || m_subMode; }
