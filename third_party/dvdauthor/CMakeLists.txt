@@ -1,5 +1,5 @@
 # Minimal CMake build glue for the vendored dvdauthor/spumux subset.
-# BDMV Author uses it for native Windows/UCRT64 and portable Linux builds.
+# BDMV Author uses it for native Windows/UCRT64, macOS/Nix, and portable Linux builds.
 # Upstream's Autotools files are retained for other source-tree users.
 cmake_minimum_required(VERSION 3.20)
 
@@ -96,3 +96,5 @@ endif()
 set_target_properties(dvdauthor spumux PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
+
+install(TARGETS dvdauthor spumux RUNTIME DESTINATION bin)
