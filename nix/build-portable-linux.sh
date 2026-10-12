@@ -21,6 +21,12 @@ out_path="$({
 } | tail -n 1)"
 test -x "$out_path/bin/bdmvauthor" || { echo "error: Nix did not produce bdmvauthor" >&2; exit 1; }
 test -x "$out_path/bin/bdmvauthor-cli" || { echo "error: Nix did not produce bdmvauthor-cli" >&2; exit 1; }
+if [[ -f "$root/third_party/libhdma/CMakeLists.txt" ]]; then
+  test -x "$out_path/bin/hdmaenc" || { echo "error: builder-supplied libhdma is present but Nix did not produce hdmaenc" >&2; exit 1; }
+fi
+if [[ -f "$root/third_party/libvc1/CMakeLists.txt" ]]; then
+  test -x "$out_path/bin/vc1enc" || { echo "error: builder-supplied libvc1 is present but Nix did not produce experimental vc1enc" >&2; exit 1; }
+fi
 test -x "$out_path/bin/tsmuxer" || { echo "error: Nix did not produce bundled tsMuxer" >&2; exit 1; }
 test -x "$out_path/bin/mkisofs" || { echo "error: Nix did not produce bundled mkisofs" >&2; exit 1; }
 test -x "$out_path/bin/dvdauthor" || { echo "error: Nix did not produce bundled dvdauthor" >&2; exit 1; }
@@ -55,12 +61,16 @@ rm -rf "$bundle_dir"
 mkdir -p "$bundle_dir"
 cp -L "$out_path/bin/bdmvauthor" "$bundle_dir/bdmvauthor"
 cp -L "$out_path/bin/bdmvauthor-cli" "$bundle_dir/bdmvauthor-cli"
+if [[ -x "$out_path/bin/vc1enc" ]]; then cp -L "$out_path/bin/vc1enc" "$bundle_dir/vc1enc"; fi
+if [[ -x "$out_path/bin/hdmaenc" ]]; then cp -L "$out_path/bin/hdmaenc" "$bundle_dir/hdmaenc"; fi
 cp -L "$out_path/bin/tsmuxer" "$bundle_dir/tsmuxer"
 cp -L "$out_path/bin/mkisofs" "$bundle_dir/mkisofs"
 cp -L "$out_path/bin/dvdauthor" "$bundle_dir/dvdauthor"
 cp -L "$out_path/bin/spumux" "$bundle_dir/spumux"
 cp -L "$out_path/bin/mplex" "$bundle_dir/mplex"
 chmod 755 "$bundle_dir/bdmvauthor" "$bundle_dir/bdmvauthor-cli" "$bundle_dir/tsmuxer" "$bundle_dir/mkisofs" "$bundle_dir/dvdauthor" "$bundle_dir/spumux" "$bundle_dir/mplex"
+if [[ -f "$bundle_dir/vc1enc" ]]; then chmod 755 "$bundle_dir/vc1enc"; fi
+if [[ -f "$bundle_dir/hdmaenc" ]]; then chmod 755 "$bundle_dir/hdmaenc"; fi
 
 echo "==> Stripping generic Linux release binaries"
 for binary in \
@@ -76,8 +86,23 @@ for binary in \
   echo "    strip $binary"
   "$strip_tool" --strip-all "$binary"
 done
+if [[ -f "$bundle_dir/vc1enc" ]]; then
+  echo "    strip $bundle_dir/vc1enc"
+  "$strip_tool" --strip-all "$bundle_dir/vc1enc"
+fi
 
+if [[ -f "$bundle_dir/hdmaenc" ]]; then
+  echo "    strip $bundle_dir/hdmaenc"
+  "$strip_tool" --strip-all "$bundle_dir/hdmaenc"
+fi
 mkdir -p "$bundle_dir/licenses"
+if [[ -f "$out_path/share/doc/bdmvauthor/third_party/libhdma/COPYING.LGPL-2.1" ]]; then
+  cp -L "$out_path/share/doc/bdmvauthor/third_party/libhdma/COPYING.LGPL-2.1" "$bundle_dir/licenses/libhdma-COPYING.LGPL-2.1"
+  cp -L "$out_path/share/doc/bdmvauthor/third_party/libhdma/LICENSE-ORIGINS.md" "$bundle_dir/licenses/libhdma-LICENSE-ORIGINS.md"
+fi
+if [[ -f "$out_path/share/doc/bdmvauthor/third_party/libvc1/LICENSE" ]]; then
+  cp -L "$out_path/share/doc/bdmvauthor/third_party/libvc1/LICENSE" "$bundle_dir/licenses/libvc1-LICENSE"
+fi
 if [[ -f "$out_path/share/doc/bdmvauthor/third_party/tsmuxer/LICENSE" ]]; then
   cp -L "$out_path/share/doc/bdmvauthor/third_party/tsmuxer/LICENSE" "$bundle_dir/licenses/tsmuxer-LICENSE"
 fi
@@ -90,6 +115,8 @@ fi
 cp -L "$out_path/portable-abi.txt" "$bundle_dir/portable-abi.txt"
 cp -L "$out_path/gui-needed-libraries.txt" "$bundle_dir/gui-needed-libraries.txt"
 cp -L "$out_path/cli-needed-libraries.txt" "$bundle_dir/cli-needed-libraries.txt"
+if [[ -f "$out_path/vc1enc-needed-libraries.txt" ]]; then cp -L "$out_path/vc1enc-needed-libraries.txt" "$bundle_dir/vc1enc-needed-libraries.txt"; fi
+if [[ -f "$out_path/hdmaenc-needed-libraries.txt" ]]; then cp -L "$out_path/hdmaenc-needed-libraries.txt" "$bundle_dir/hdmaenc-needed-libraries.txt"; fi
 cp -L "$out_path/tsmuxer-needed-libraries.txt" "$bundle_dir/tsmuxer-needed-libraries.txt"
 cp -L "$out_path/mkisofs-needed-libraries.txt" "$bundle_dir/mkisofs-needed-libraries.txt"
 cp -L "$out_path/dvdauthor-needed-libraries.txt" "$bundle_dir/dvdauthor-needed-libraries.txt"
@@ -103,6 +130,8 @@ echo "  dist/$cli_name"
 echo "  $bundle_dir/"
 echo "    bdmvauthor"
 echo "    bdmvauthor-cli"
+if [[ -f "$bundle_dir/vc1enc" ]]; then echo "    vc1enc   (compiled experimental private sibling)"; fi
+if [[ -f "$bundle_dir/hdmaenc" ]]; then echo "    hdmaenc  (lossless experimental private sibling)"; fi
 echo "    tsmuxer  (bundled private sibling)"
 echo "    mkisofs  (bundled private sibling)"
 echo "    dvdauthor (bundled private sibling)"
@@ -110,11 +139,13 @@ echo "    spumux    (bundled private sibling)"
 echo "    mplex     (bundled private sibling)"
 echo "GUI host-provided shared libraries:"; sed 's/^/  /' "$out_path/gui-needed-libraries.txt"
 echo "CLI host-provided shared libraries:"; sed 's/^/  /' "$out_path/cli-needed-libraries.txt"
+if [[ -x "$out_path/bin/vc1enc" ]]; then echo "Bundled experimental vc1enc host-provided shared libraries:"; sed 's/^/  /' "$out_path/vc1enc-needed-libraries.txt"; fi
+if [[ -x "$out_path/bin/hdmaenc" ]]; then echo "Bundled experimental hdmaenc host-provided shared libraries:"; sed 's/^/  /' "$out_path/hdmaenc-needed-libraries.txt"; fi
 echo "Bundled tsMuxer host-provided shared libraries:"; sed 's/^/  /' "$out_path/tsmuxer-needed-libraries.txt"
 echo "Bundled mkisofs host-provided shared libraries:"; sed 's/^/  /' "$out_path/mkisofs-needed-libraries.txt"
 echo "Bundled dvdauthor host-provided shared libraries:"; sed 's/^/  /' "$out_path/dvdauthor-needed-libraries.txt"
 echo "Bundled spumux host-provided shared libraries:"; sed 's/^/  /' "$out_path/spumux-needed-libraries.txt"
 echo "Bundled mplex host-provided shared libraries:"; sed 's/^/  /' "$out_path/mplex-needed-libraries.txt"
 echo "ABI/toolchain audit:"; sed 's/^/  /' "$out_path/portable-abi.txt"
-echo "FFmpeg/ffprobe and standalone x264/x265 remain runtime-discovered system tools; bundled DVD helpers may be overridden in Settings."
+echo "FFmpeg/ffprobe and standalone x264/x265 remain runtime-discovered system tools; experimental libvc1 VC-1 and libhdma lossless audio use packaged vc1enc/hdmaenc when built; bundled DVD helpers may be overridden in Settings."
 echo "A Settings/CLI tsMuxer override takes precedence over the bundled sibling."
