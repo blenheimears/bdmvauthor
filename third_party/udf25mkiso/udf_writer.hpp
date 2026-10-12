@@ -36,6 +36,9 @@ struct WriterOptions {
     // Optional cooperative cancellation hook. The writer checks it between
     // layout/write phases and while streaming large file payloads.
     std::function<bool()> cancel_requested;
+    // Physical image-writing progress (0..1). Called only from the writer's
+    // build thread, after successful writes; a completed verify reports 1.0.
+    std::function<void(double)> progress;
     std::optional<std::int64_t> fixed_mtime;
     std::vector<GraftPoint> grafts;
     std::vector<std::string> virtual_directories;

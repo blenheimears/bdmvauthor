@@ -1143,6 +1143,17 @@ struct ImageWriter::Impl {
         for (const auto& child : node.children) hash_file_payloads(*child, buffer);
     }
 
+    std::uint64_t progress_payload_written = 0;
+    double progress_last_report = -1.0;
+    void emit_image_progress(double fraction) {
+        if (!options.progress) return;
+        fraction = std::clamp(fraction, 0.0, 1.0);
+        if (fraction >= 1.0 || fraction - progress_last_report >= 0.001) {
+            progress_last_report = fraction;
+            options.progress(fraction);
+        }
+    }
+
     void write_file_payloads(SequentialOutput& out, const Node& node, std::vector<char>& buffer) {
         if (!node.directory && node.size != 0) {
             std::ifstream input(node.source, std::ios::binary);
@@ -1160,6 +1171,11 @@ struct ImageWriter::Impl {
                     throw std::runtime_error("input became shorter while reading: " + path_to_utf8(node.source));
                 out.write_at(image_offset + written, buffer.data(), static_cast<std::size_t>(got));
                 written += static_cast<std::uint64_t>(got);
+                progress_payload_written += static_cast<std::uint64_t>(got);
+                // Keep the last 2% for metadata, flushing and verification.
+                if (stats.payload_bytes != 0)
+                    emit_image_progress(0.98 * static_cast<double>(progress_payload_written) /
+                        static_cast<double>(stats.payload_bytes));
             }
             char extra = 0;
             if (input.read(&extra, 1))
@@ -1386,6 +1402,7 @@ struct ImageWriter::Impl {
         else volume_time = std::time(nullptr);
 
         cancellation_point();
+        emit_image_progress(0.0);
         import_grafts();
         count_nodes(root);
         // Keep the 1 MiB streaming buffer on the heap.  Native Windows GUI
@@ -1456,6 +1473,7 @@ struct ImageWriter::Impl {
         }
         cancellation_point();
         out.finish(stats.image_bytes);
+        emit_image_progress(0.99);
 
         if (options.verify_after_write && !options.output_to_stdout) {
             std::ostringstream report;
@@ -1465,6 +1483,7 @@ struct ImageWriter::Impl {
         } else if (options.verify_after_write && options.output_to_stdout && options.verbose) {
             std::cerr << "post-write verification skipped for standard output\n";
         }
+        emit_image_progress(1.0);
         return stats;
     }
 };
