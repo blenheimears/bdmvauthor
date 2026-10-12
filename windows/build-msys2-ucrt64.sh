@@ -139,6 +139,9 @@ cmake -S "$root" -B "$build_dir" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DBDMVAUTHOR_BUILD_GUI=ON \
   -DBDMVAUTHOR_BUILD_BUNDLED_TSMUXER=ON \
+  -DBDMVAUTHOR_BUILD_BUNDLED_LIBVC1=ON \
+  -DBDMVAUTHOR_BUILD_BUNDLED_LIBHDMA=ON \
+  -DBDMVAUTHOR_BUILD_BUNDLED_LIBHDMA=ON \
   -DBDMVAUTHOR_BUILD_BUNDLED_DVDAUTHOR=ON \
   -DBDMVAUTHOR_BUILD_BUNDLED_MKISOFS=ON \
   -DBDMVAUTHOR_BUILD_BUNDLED_MPLEX=ON \
@@ -154,6 +157,14 @@ if [[ ! -f "$build_dir/bdmvauthor.exe" ]]; then
 fi
 if [[ ! -f "$build_dir/bdmvauthor-cli.exe" || ! -f "$build_dir/tsmuxer.exe" ]]; then
   echo "error: expected bdmvauthor-cli.exe and tsmuxer.exe beside the GUI" >&2
+  exit 1
+fi
+if [[ -f "$root/third_party/libhdma/CMakeLists.txt" && ! -f "$build_dir/hdmaenc.exe" ]]; then
+  echo "error: builder-supplied libhdma is present but experimental hdmaenc.exe was not built" >&2
+  exit 1
+fi
+if [[ -f "$root/third_party/libvc1/CMakeLists.txt" && ! -f "$build_dir/vc1enc.exe" ]]; then
+  echo "error: builder-supplied libvc1 is present but experimental vc1enc.exe was not built" >&2
   exit 1
 fi
 if [[ ! -f "$build_dir/dvdauthor.exe" || ! -f "$build_dir/spumux.exe" ]]; then
@@ -178,6 +189,8 @@ ctest --test-dir "$build_dir" --output-on-failure -C Release
 
 cp -f "$build_dir/bdmvauthor.exe" "$dist_dir/"
 cp -f "$build_dir/bdmvauthor-cli.exe" "$dist_dir/"
+if [[ -f "$build_dir/vc1enc.exe" ]]; then cp -f "$build_dir/vc1enc.exe" "$dist_dir/"; fi
+if [[ -f "$build_dir/hdmaenc.exe" ]]; then cp -f "$build_dir/hdmaenc.exe" "$dist_dir/"; fi
 cp -f "$build_dir/tsmuxer.exe" "$dist_dir/"
 cp -f "$build_dir/dvdauthor.exe" "$dist_dir/"
 cp -f "$build_dir/spumux.exe" "$dist_dir/"
@@ -191,6 +204,9 @@ cp -f "$ffmpeg_source_dir/ffprobe.exe" "$dist_dir/ffprobe.exe"
 mkdir -p "$dist_dir/licenses"
 cp -f "$root/LICENSE" "$dist_dir/LICENSE-BDMVAUTHOR.txt"
 cp -f "$root/THIRD_PARTY_NOTICES.md" "$dist_dir/THIRD_PARTY_NOTICES.md"
+if [[ -f "$root/third_party/libvc1/LICENSE" ]]; then cp -f "$root/third_party/libvc1/LICENSE" "$dist_dir/licenses/libvc1-LICENSE.txt"; fi
+if [[ -f "$root/third_party/libhdma/COPYING.LGPL-2.1" ]]; then cp -f "$root/third_party/libhdma/COPYING.LGPL-2.1" "$dist_dir/licenses/libhdma-COPYING.LGPL-2.1.txt"; fi
+if [[ -f "$root/third_party/libhdma/LICENSE-ORIGINS.md" ]]; then cp -f "$root/third_party/libhdma/LICENSE-ORIGINS.md" "$dist_dir/licenses/libhdma-LICENSE-ORIGINS.md"; fi
 cp -f "$root/third_party/tsmuxer/LICENSE" "$dist_dir/licenses/tsMuxer-LICENSE.txt"
 cp -f "$root/third_party/dvdauthor/COPYING" "$dist_dir/licenses/dvdauthor-COPYING.txt"
 cp -f "$root/third_party/mplex/COPYING" "$dist_dir/licenses/mplex-COPYING.txt"
@@ -415,11 +431,16 @@ BDMV Author $version - Windows UCRT64 build
 
 This directory is self-contained for BDMV Author's own native runtime: the GUI,
 CLI, bundled tsMuxer, bundled dvdauthor/spumux, bundled cdrtools mkisofs,
-bundled mplex, FFmpeg/ffprobe, Qt plugins, private Fontconfig
+bundled mplex, optional compiled experimental vc1enc and hdmaenc, FFmpeg/ffprobe, Qt plugins, private Fontconfig
 configuration, and all required non-Windows DLLs are included. FFmpeg/ffprobe
 were staged from: $ffmpeg_source_description. No MSYS2 shell
 or MSYS2 PATH is required to launch bdmvauthor.exe.
 
+VC-1 is marked Experimental and uses the private vc1enc sibling when this build
+was made with builder-supplied third_party/libvc1 present; it does not require Debug mode.
+libhdma is labeled lossless/experimental and uses the private hdmaenc sibling when
+built with builder-supplied third_party/libhdma. It accepts raw PCM from FFmpeg
+and does not require libsndfile.
 Standalone x264/x265 remain optional external authoring tools.
 Executables placed beside bdmvauthor.exe are detected automatically before the normal
 Windows PATH is searched. Explicit paths configured in BDMV Author's External
