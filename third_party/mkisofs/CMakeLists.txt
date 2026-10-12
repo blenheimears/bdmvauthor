@@ -10,8 +10,17 @@ include(CheckFunctionExists)
 include(CheckSymbolExists)
 include(CheckTypeSize)
 include(CheckCSourceCompiles)
+include(TestBigEndian)
 
 find_package(Iconv REQUIRED)
+
+# Populate the endian contract expected by the imported cdrtools headers.
+# Relying on compiler/OS architecture macros is not portable (notably,
+# Apple Clang on arm64 does not expose the legacy __BYTE_ORDER/__LITTLE_ENDIAN
+# pair used by cdrtools 3.02a09). TestBigEndian is compile-time/cross-build safe
+# and mirrors the result that upstream autoconf would place in xconfig.h.
+test_big_endian(WORDS_BIGENDIAN)
+set(HAVE_C_BIGENDIAN 1)
 
 # cdrtools large-file mode requires off_t and struct stat::st_size to be 64-bit.
 # This is especially important on MinGW-w64, where the default off_t may remain
