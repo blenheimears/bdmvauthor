@@ -20,7 +20,7 @@ foreach(needle
   "peakBitrateKbps"
   "combined_transport_limit_kbps"
   "max_transport_bitrate_kbps"
-  "e.video_codec == VideoCodec::Hevc ? 86000 : 40000"
+  "video_codec_is_hevc(e.video_codec) ? 86000 : 40000"
   "kUhdHevcVbvBufsizeKbits = 100000"
   "peak_bitrate_limit_kbps << \"k -bufsize \" << kUhdHevcVbvBufsizeKbits"
   "vbv-maxrate=\" << peak_bitrate_limit_kbps << \":vbv-bufsize=\" << kUhdHevcVbvBufsizeKbits"
@@ -53,9 +53,9 @@ endforeach()
 # miss can measure its actual peak before the video cache key/encoder is chosen.
 string(FIND "${AUTHOR}" "title_label << \"title \"" TITLE_START)
 string(SUBSTRING "${AUTHOR}" ${TITLE_START} -1 TITLE_SECTION)
-string(FIND "${TITLE_SECTION}" "encoded = encode_audio(tools_, title.source" AUDIO_ENCODE)
+string(FIND "${TITLE_SECTION}" "encoded = encode_audio_on_pool(" AUDIO_ENCODE)
 string(FIND "${TITLE_SECTION}" "video_cache_key(*title_fp" VIDEO_KEY)
-string(FIND "${TITLE_SECTION}" "(void)encode_video(tools_, title.source" VIDEO_ENCODE)
+string(FIND "${TITLE_SECTION}" "encode_on_pool(job_label,source" VIDEO_ENCODE)
 if(AUDIO_ENCODE EQUAL -1 OR VIDEO_KEY EQUAL -1 OR VIDEO_ENCODE EQUAL -1 OR
    AUDIO_ENCODE GREATER VIDEO_KEY OR AUDIO_ENCODE GREATER VIDEO_ENCODE)
   message(FATAL_ERROR "title audio is not prepared before video cache selection/encoding")

@@ -4,8 +4,8 @@ file(READ "${SOURCE_DIR}/src/cli.cpp" CLI)
 file(READ "${SOURCE_DIR}/src/gui.cpp" GUI)
 
 foreach(needle
-    "enum class AudioCodec { Ac3, Lpcm, Dca, TrueHdAc3 }"
-    "enum class VideoCodec { X264, Mpeg2, Hevc }"
+    "enum class AudioCodec { Ac3, Lpcm, Dca, TrueHdAc3, Libhdma }"
+    "enum class VideoCodec { X264=0, Mpeg2=1, Hevc=2, Vc1=3, H264Hardware=4, HevcHardware=5 }"
     "VideoCodec video_codec = VideoCodec::X264"
     "int video_bitrate_kbps = 24000"
     "std::string x264_preset = \"medium\""
@@ -69,11 +69,16 @@ foreach(needle
     "FFmpeg MPEG-2"
     "AC-3 (default)"
     "LPCM"
-    "DTS / DCA"
-    "TrueHD + AC-3 core (experimental)"
+    "DCA"
+    "THD + AC-3 core (experimental)"
     "Menu encoding"
     "Enable two-pass encoding"
     "Menu audio"
+    "titleSettingsHorizontalScrollBar"
+    "QStyle::SH_ScrollBar_Transient"
+    "persistentTitleScrollStyle->setParent(titleSettingsScroll)"
+    "titles_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff)"
+    "connect(titleSettingsScroll,&QScrollBar::valueChanged,tableHorizontalScroll,&QScrollBar::setValue)"
 )
   string(FIND "${GUI}" "${needle}" pos)
   if(pos EQUAL -1)

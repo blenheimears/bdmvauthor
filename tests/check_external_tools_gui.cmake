@@ -62,4 +62,14 @@ foreach(needle "--x265 PATH" "--h264-provider MODE" "--hevc-provider MODE")
     message(FATAL_ERROR "missing encoder-provider CLI marker: ${needle}")
   endif()
 endforeach()
+
+# Capability rescans must preserve edits that are still represented only by the
+# visible title widgets.  In particular, selecting a hardware codec and then
+# changing local/remote worker settings must not reload the older software codec
+# from the per-target role.
+set(PRESERVE_NEEDLE "if(titles_)store_visible_title_profiles(displayed_target_);\n        set_target_availability();\n        if(menu_video_&&menu_audio_codec_)load_menu_controls();\n        if(titles_)load_visible_title_profiles(displayed_target_);")
+string(FIND "${GUI}" "${PRESERVE_NEEDLE}" preserve_pos)
+if(preserve_pos EQUAL -1)
+  message(FATAL_ERROR "external-tool refresh no longer preserves visible title profiles before rebuilding codec controls")
+endif()
 message(STATUS "external-tool discovery/provider source checks ok")

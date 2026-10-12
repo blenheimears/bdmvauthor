@@ -21,10 +21,11 @@ foreach(needle
   endif()
 endforeach()
 foreach(needle
-  "kProjectFormatVersion = 24"
+  "kProjectFormatVersion = 29"
   "audioStreams"
   "subtitleStreams"
   "lpcmSampleRateHz"
+  "ac3BitrateKbps"
   "lpcmBitDepth"
 )
   string(FIND "${PROJECT}" "${needle}" pos)
@@ -54,13 +55,14 @@ foreach(needle
   "Lossless depth"
   "Configured encode ceiling"
   "Configured fixed-rate ceiling"
-  "TrueHD track(s): peak bitrate is measured during authoring"
+  "THD track(s): peak bitrate is measured during authoring"
   "row_peak_measured_during_authoring"
   "RoleAudioStreamSettings"
   "RoleSubtitleStreamSettings"
   "Streams…"
   "setReadOnly(true)"
-  "titles_=new QTableWidget(0,19)"
+  "configure_audio_bitrate_spin(row.bitrate,target_,active.audio_codec,audio_bitrate_kbps(active),allow_exceeding_format_limits_)"
+  "titles_=new QTableWidget(0,20)"
   "setWindowTitle(QStringLiteral(\"%1[*]\").arg(name))"
 )
   string(FIND "${GUI}" "${needle}" pos)

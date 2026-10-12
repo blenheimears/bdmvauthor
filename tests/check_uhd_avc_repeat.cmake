@@ -7,8 +7,8 @@ file(READ "${SOURCE_DIR}/src/gui.cpp" GUI)
 file(READ "${SOURCE_DIR}/src/cli.cpp" CLI)
 
 foreach(needle
-  "codec == VideoCodec::Hevc || codec == VideoCodec::X264"
-  "target == DiscTarget::UltraHdBluRay2160 && codec == VideoCodec::X264"
+  "video_codec_is_hevc(codec) || video_codec_is_h264(codec)"
+  "target == DiscTarget::UltraHdBluRay2160 && video_codec_is_h264(codec)"
   "return 40000"
   "std::uint16_t repeat_count = 1")
   string(FIND "${MODEL}" "${needle}" pos)
@@ -19,7 +19,7 @@ endforeach()
 
 foreach(needle
   "AVC/H.264 in Ultra HD Blu-ray v3 is limited to 1920x1080 16:9 at 23.976p or 24p"
-  "codec == VideoCodec::X264"
+  "video_codec_is_h264(e.video_codec)"
   "width != 1920 || height != 1080"
   "bdmvauthor-video-cache-v14"
   "bdmvauthor-compliance-cache-v11"
@@ -57,7 +57,7 @@ foreach(needle
 endforeach()
 
 foreach(needle
-  "kProjectFormatVersion = 24"
+  "kProjectFormatVersion = 29"
   "repeatCount")
   string(FIND "${PROJECT}" "${needle}" pos)
   if(pos EQUAL -1)
@@ -77,7 +77,7 @@ foreach(needle
 endforeach()
 
 foreach(needle
-  "UHD: hevc or x264 (1080p23.976/24)"
+  "UHD: hevc/hevc-hardware or AVC at legal 1080p rates"
   "--button-action-repeat N"
   "--first-play-repeat N"
   "--button-action-repeat must be 0..1000"

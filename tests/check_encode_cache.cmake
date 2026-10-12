@@ -23,8 +23,8 @@ foreach(needle
   "cache_tmp_dir / \"video\""
   "fs::rename(temporary, cached, ec)"
   "No copy fallback is"
-  "video_meta_for(video_cache_file"
-  "audio_meta_for(audio_cache_file"
+  "video_meta_for(video_cache.hit"
+  "audio_meta_for(audio_cache.hit"
   "trap 'exit 130' INT TERM HUP"
   "fs::path(home) / \".cache\" / \"bdmvauthor\" / \"encoded-clips\"")
   string(FIND "${A}" "${needle}" pos)
@@ -55,13 +55,13 @@ if(TITLE_CACHE_START EQUAL -1)
   message(FATAL_ERROR "could not locate title encode-cache section")
 endif()
 string(SUBSTRING "${A}" ${TITLE_CACHE_START} -1 TITLE_CACHE_SECTION)
-string(FIND "${TITLE_CACHE_SECTION}" "(void)encode_video(tools_, title.source, cache_tmp_base" VIDEO_ENCODE)
-string(FIND "${TITLE_CACHE_SECTION}" "finalize_encoded_cache_file(cache_tmp_output, video_cache_file" VIDEO_FINAL)
+string(FIND "${TITLE_CACHE_SECTION}" "(void)encode_on_pool(job_label,source,cache_tmp_base" VIDEO_ENCODE)
+string(FIND "${TITLE_CACHE_SECTION}" "finalize_encoded_cache_file(cache_tmp_output,video_cache_write" VIDEO_FINAL)
 if(VIDEO_ENCODE EQUAL -1 OR VIDEO_FINAL EQUAL -1 OR VIDEO_FINAL LESS VIDEO_ENCODE)
   message(FATAL_ERROR "video cache final name must be published only after successful cache-directory encoding")
 endif()
-string(FIND "${TITLE_CACHE_SECTION}" "encoded = encode_audio(tools_, title.source, cache_tmp_dir" AUDIO_ENCODE)
-string(FIND "${TITLE_CACHE_SECTION}" "finalize_encoded_cache_file(encoded.path, audio_cache_file" AUDIO_FINAL)
+string(FIND "${TITLE_CACHE_SECTION}" "encoded = encode_audio_on_pool(" AUDIO_ENCODE)
+string(FIND "${TITLE_CACHE_SECTION}" "finalize_encoded_cache_file(encoded.path, audio_cache.write" AUDIO_FINAL)
 if(AUDIO_ENCODE EQUAL -1 OR AUDIO_FINAL EQUAL -1 OR AUDIO_FINAL LESS AUDIO_ENCODE)
   message(FATAL_ERROR "audio cache final name must be published only after successful cache-directory encoding")
 endif()
@@ -73,8 +73,7 @@ foreach(needle
   "bdmvauthor-menu-video-cache-v5"
   "bdmvauthor-menu-audio-cache-v2"
   "bdmvauthor-dvd-menu-audio-cache-v2"
-  "encode_cache_root / \"menu-video\""
-  "encode_cache_root / \"menu-audio\""
+  "encoded_cache_paths("
   "menu_video_cache_key(background, combined_overlay"
   "menu_video_cache_key(menu_background, menu_overlay"
   "Using cached encoded video for DVD menu"

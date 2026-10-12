@@ -24,7 +24,7 @@ foreach(needle
   "if(maybe_save_modified())event->accept();else event->ignore();"
   "if(!maybe_save_modified())return;"
   "setWindowModified(project_modified_)"
-  "suppress_modified_=false;mark_clean()")
+  "suppress_modified_=false;reset_history();mark_clean()")
   string(FIND "${GUI}" "${needle}" pos)
   if(pos EQUAL -1)
     message(FATAL_ERROR "GUI menus/unsaved-project regression: missing ${needle}")

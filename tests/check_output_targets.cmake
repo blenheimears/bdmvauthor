@@ -9,10 +9,10 @@ file(READ "${SOURCE_DIR}/src/hdmv.cpp" HDMV)
 foreach(needle
   "kProjectDesignWidth = 3840"
   "kProjectDesignHeight = 2160"
-  "DiscTarget { BluRay1080, UltraHdBluRay2160, DvdVideo480p }"
+  "DiscTarget { BluRay1080 = 0, UltraHdBluRay2160 = 1, DvdVideo480p = 2, Avchd = 3 }"
   "UltraHdBluRay2160: return {3840,2160,1920,1080}"
   "DvdVideo480p: return {720,480,720,480}"
-  "VideoCodec { X264, Mpeg2, Hevc }"
+  "VideoCodec { X264=0, Mpeg2=1, Hevc=2, Vc1=3, H264Hardware=4, HevcHardware=5 }"
   "EncodingProfile uhd_encoding = default_uhd_encoding_profile()"
   "EncodingProfile dvd_encoding = default_dvd_encoding_profile()"
   "encoding_for_target"
@@ -65,7 +65,7 @@ foreach(needle
 endforeach()
 
 foreach(needle
-  "kProjectFormatVersion = 24"
+  "kProjectFormatVersion = 29"
   "blurayEncoding"
   "dvdEncoding"
   "uhdEncoding"

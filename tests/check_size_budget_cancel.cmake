@@ -27,7 +27,7 @@ foreach(needle
 endforeach()
 
 foreach(needle
-  "kProjectFormatVersion = 24"
+  "kProjectFormatVersion = 29"
   "discCapacityBytes"
   "automaticVideoBitrate"
   "version >= 22"

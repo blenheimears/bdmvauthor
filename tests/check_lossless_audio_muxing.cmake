@@ -36,10 +36,11 @@ if(NOT stale_lpcm_start EQUAL -1)
 endif()
 
 # TrueHD requires the Blu-ray extended audio PES extension/subtype signalling.
-string(FIND "${AUTHOR}" "--new-audio-pes --start-time=" explicit_pes)
+string(FIND "${AUTHOR}" "--new-audio-pes" explicit_pes)
+string(FIND "${AUTHOR}" "--start-time=" explicit_start_time)
 string(FIND "${AC3}" "if (m_useNewStyleAudioPES)" pes_ext)
 string(FIND "${AC3}" "0x76;  // AC3 at TRUE-HD" truehd_core_subtype)
-if(explicit_pes EQUAL -1 OR pes_ext EQUAL -1 OR truehd_core_subtype EQUAL -1)
+if(explicit_pes EQUAL -1 OR explicit_start_time EQUAL -1 OR pes_ext EQUAL -1 OR truehd_core_subtype EQUAL -1)
   message(FATAL_ERROR "TrueHD Blu-ray extended-PES signalling regression")
 endif()
 

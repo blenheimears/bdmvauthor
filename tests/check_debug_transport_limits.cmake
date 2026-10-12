@@ -17,7 +17,7 @@ foreach(needle
   "Allow exceeding format limits"
   "authoring_limits_.allow_exceeding_format_limits"
   "auto limits=authoring_limits_"
-  "AuthorEngine e(tools,limits)")
+  "AuthorEngine e(engine_tools,limits,storage)")
   string(FIND "${GUI}" "${needle}" pos)
   if(pos EQUAL -1)
     message(FATAL_ERROR "debug transport settings regression: missing GUI marker: ${needle}")
@@ -29,7 +29,7 @@ foreach(needle
   "int uhd_transport_bitrate_kbps = 70000;"
   "int dvd_transport_bitrate_kbps = 10080;"
   "bool allow_exceeding_format_limits = false;"
-  "AuthorEngine(ToolPaths tools = {}, AuthoringLimits limits = {})")
+  "AuthorEngine(ToolPaths tools = {}, AuthoringLimits limits = {}, StoragePaths storage = {})")
   string(FIND "${AUTHOR_H}" "${needle}" pos)
   if(pos EQUAL -1)
     message(FATAL_ERROR "debug transport settings regression: missing API marker: ${needle}")

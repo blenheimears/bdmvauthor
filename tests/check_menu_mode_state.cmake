@@ -15,7 +15,7 @@ foreach(needle
 endforeach()
 
 foreach(needle
-  "kProjectFormatVersion = 24"
+  "kProjectFormatVersion = 29"
   "blurayMenuResolution"
   "uhdMenuResolution"
   "dvdMenuResolution"

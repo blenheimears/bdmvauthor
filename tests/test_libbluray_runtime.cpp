@@ -5,19 +5,24 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
-#ifdef __unix__
+#if defined(__unix__) || defined(__APPLE__)
 #include <dlfcn.h>
 #endif
 
 namespace fs = std::filesystem;
 
 int main() {
-#ifndef __unix__
-    std::cout << "SKIP: runtime libbluray probe is Unix-only\n";
+#if !defined(__unix__) && !defined(__APPLE__)
+    std::cout << "SKIP: runtime libbluray probe is POSIX-only\n";
     return 0;
+#else
+#if defined(__APPLE__)
+    void* so = dlopen("libbluray.2.dylib", RTLD_NOW | RTLD_LOCAL);
+    if (!so) so = dlopen("libbluray.dylib", RTLD_NOW | RTLD_LOCAL);
 #else
     void* so = dlopen("libbluray.so.2", RTLD_NOW | RTLD_LOCAL);
     if (!so) so = dlopen("libbluray.so", RTLD_NOW | RTLD_LOCAL);
+#endif
     if (!so) {
         std::cout << "SKIP: libbluray runtime not installed\n";
         return 0;

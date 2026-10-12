@@ -75,7 +75,7 @@ foreach(needle
   "blurayMenuAspectRatio"
   "uhdMenuAspectRatio"
   "dvdMenuAspectRatio"
-  "kProjectFormatVersion = 24")
+  "kProjectFormatVersion = 29")
   string(FIND "${PROJECT}" "${needle}" pos)
   if(pos EQUAL -1)
     message(FATAL_ERROR "video-mode persistence regression: missing ${needle}")
@@ -95,7 +95,7 @@ foreach(needle
   "352×288 PAL"
   "Ultra HD Blu-ray primary video may be 3840×2160 or 1920×1080"
   "populate_aspect_choices"
-  "titles_=new QTableWidget(0,19)")
+  "titles_=new QTableWidget(0,20)")
   string(FIND "${GUI}" "${needle}" pos)
   if(pos EQUAL -1)
     message(FATAL_ERROR "video-mode GUI regression: missing ${needle}")

@@ -20,7 +20,7 @@ foreach(needle
   endif()
 endforeach()
 foreach(needle
-  "kProjectFormatVersion = 24"
+  "kProjectFormatVersion = 29"
   "chapterMode"
   "chapterIntervalSeconds"
   "targetChapter"

@@ -19,7 +19,7 @@ foreach(needle
     "Output channels"
     "--audio-stream-channels"
     "--subtitle-file"
-    "kProjectFormatVersion = 24")
+    "kProjectFormatVersion = 29")
   set(found FALSE)
   foreach(text "${model}" "${author_h}" "${author}" "${gui}" "${project}" "${cli}")
     string(FIND "${text}" "${needle}" pos)

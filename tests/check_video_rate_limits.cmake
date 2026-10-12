@@ -22,7 +22,7 @@ foreach(needle
 endforeach()
 
 foreach(needle
-  "kProjectFormatVersion = 24"
+  "kProjectFormatVersion = 29"
   "videoMinrateKbps"
   "videoMaxrateKbps")
   string(FIND "${PROJECT}" "${needle}" pos)

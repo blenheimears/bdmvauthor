@@ -28,11 +28,12 @@ foreach(needle
   "validate_encoding_for_target"
   "must use HEVC/H.265 or AVC/H.264 video for Ultra HD Blu-ray"
   "must use MPEG-2 video for DVD-Video"
-  "must use H.264/AVC or MPEG-2 video for standard Blu-ray"
+  "must use H.264/AVC, MPEG-2, or experimental libvc1 VC-1 video for standard Blu-ray"
   "DVD-Video audio must use AC-3 or LPCM"
   "DVD-Video AC-3 bitrate must not exceed 448 kb/s"
-  "t.dvd_encoding"
-  "menu.dvd_encoding"
+  "encoding_for_target(t, p.target)"
+  "encoding_for_target(menu, p.target)"
+  "copy_audio_encoding_settings(effective, encoding_for_target(stream, p.target))"
 )
   string(FIND "${AUTHOR}" "${needle}" pos)
   if(pos EQUAL -1)
@@ -41,7 +42,7 @@ foreach(needle
 endforeach()
 
 foreach(needle
-  "kProjectFormatVersion = 24"
+  "kProjectFormatVersion = 29"
   "blurayEncoding"
   "uhdEncoding"
   "dvdEncoding"
@@ -76,7 +77,7 @@ foreach(needle
   "next_title_dvd = default_dvd_encoding_profile()"
   "allows hevc or x264/AVC for Ultra HD Blu-ray"
   "allows only mpeg2 for DVD-Video"
-  "allows only x264 or mpeg2 for standard Blu-ray"
+  "allows x264, mpeg2, or experimental vc1 for standard Blu-ray"
   "allows only ac3 or lpcm for DVD-Video"
   "target_max_ac3_bitrate_kbps(p.target)"
   "video_codec_max_bitrate_kbps(p.target,codec)"
@@ -86,6 +87,29 @@ foreach(needle
   string(FIND "${CLI}" "${needle}" pos)
   if(pos EQUAL -1)
     message(FATAL_ERROR "missing target-restricted CLI marker: ${needle}")
+  endif()
+endforeach()
+
+
+# Disc legality must not depend on whether process frontends were bundled into
+# this particular BDMV Author build. The scheduler resolves tool capability.
+string(FIND "${MODEL}" "BDMVAUTHOR_HAVE_VC1ENC" stale_vc1_legality)
+string(FIND "${MODEL}" "BDMVAUTHOR_HAVE_HDMAENC" stale_hdma_legality)
+if(NOT stale_vc1_legality EQUAL -1 OR NOT stale_hdma_legality EQUAL -1)
+  message(FATAL_ERROR "disc-format legality is still coupled to build-time vc1enc/hdmaenc availability")
+endif()
+
+foreach(needle
+  "local_worker_eligible_for_scheduler"
+  "local_fallback_when_remote_unavailable"
+  "remote_worker_pool_enabled"
+  "any_remote_hardware_encoder_configured"
+  "GUI availability is scheduler-wide"
+  "const bool local=local_worker_eligible_for_scheduler()"
+  "const bool remote=remote_worker_pool_enabled()")
+  string(FIND "${GUI}" "${needle}" pos)
+  if(pos EQUAL -1)
+    message(FATAL_ERROR "missing scheduler-aware GUI codec availability marker: ${needle}")
   endif()
 endforeach()
 

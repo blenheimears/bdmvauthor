@@ -84,7 +84,7 @@ foreach(needle
 endforeach()
 
 foreach(needle
-  "kProjectFormatVersion = 24"
+  "kProjectFormatVersion = 29"
   "\"active\", state_style_json(s.active)"
   "defaultAudioStream"
   "defaultSubtitleStream")

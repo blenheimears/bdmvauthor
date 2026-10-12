@@ -15,7 +15,7 @@ foreach(needle
 endforeach()
 
 file(READ "${SOURCE_DIR}/src/project_file.cpp" PROJECT)
-foreach(needle "kProjectFormatVersion = 24" "hasMenu" "!o.value(\"hasMenu\").toBool(true)")
+foreach(needle "kProjectFormatVersion = 29" "hasMenu" "!o.value(\"hasMenu\").toBool(true)")
   string(FIND "${PROJECT}" "${needle}" pos)
   if(pos EQUAL -1)
     message(FATAL_ERROR "missing menuless persistence marker: ${needle}")

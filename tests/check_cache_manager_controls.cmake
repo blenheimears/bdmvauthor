@@ -16,8 +16,8 @@ foreach(needle
 endforeach()
 
 foreach(needle
-  "const fs::path encode_cache_root = p.use_encode_cache"
-  "const fs::path compliance_cache_root = p.use_compliance_cache"
+  "const fs::path encode_cache_root = (p.use_encode_cache && application_cache_enabled)"
+  "const fs::path compliance_cache_root = (p.use_compliance_cache && application_cache_enabled)"
   "!p.refresh_encode_cache && cache_file_usable"
   "if (!p.refresh_compliance_cache)"
   "force_reencode = p.force_reencode || title.force_reencode"
@@ -88,7 +88,7 @@ foreach(needle
   endif()
 endforeach()
 
-foreach(needle "kProjectFormatVersion = 24" "useEncodeCache" "useComplianceCache")
+foreach(needle "kProjectFormatVersion = 29" "useEncodeCache" "useComplianceCache")
   string(FIND "${PROJECT}" "${needle}" pos)
   if(pos EQUAL -1)
     message(FATAL_ERROR "missing project cache persistence marker: ${needle}")

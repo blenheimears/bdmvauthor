@@ -46,7 +46,7 @@ foreach(needle
 endforeach()
 
 foreach(needle
-  "kProjectFormatVersion = 24" "x264AdvancedOptions" "x265AdvancedOptions"
+  "kProjectFormatVersion = 29" "x264AdvancedOptions" "x265AdvancedOptions"
   "mpeg2AdvancedOptions" "ac3AdvancedOptions" "dcaAdvancedOptions"
   "lpcmAdvancedOptions" "truehdAdvancedOptions")
   string(FIND "${PROJECT}" "${needle}" pos)

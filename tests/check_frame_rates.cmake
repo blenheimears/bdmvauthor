@@ -80,7 +80,7 @@ foreach(needle
   "blurayFrameRate"
   "uhdFrameRate"
   "dvdFrameRate"
-  "kProjectFormatVersion = 24")
+  "kProjectFormatVersion = 29")
   string(FIND "${P}" "${needle}" pos)
   if(pos EQUAL -1)
     message(FATAL_ERROR "per-title frame-rate persistence regression: missing ${needle}")

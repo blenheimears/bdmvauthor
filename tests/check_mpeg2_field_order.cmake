@@ -11,8 +11,8 @@ endif()
 
 string(REGEX MATCHALL "-flags \\+ildct\\+ilme -field_order tt" FIELD_ORDER_MATCHES "${AUTHOR}")
 list(LENGTH FIELD_ORDER_MATCHES FIELD_ORDER_COUNT)
-if(NOT FIELD_ORDER_COUNT EQUAL 2)
-  message(FATAL_ERROR "expected DVD and Blu-ray interlaced MPEG-2 paths to emit -field_order tt; found ${FIELD_ORDER_COUNT}")
+if(NOT FIELD_ORDER_COUNT EQUAL 3)
+  message(FATAL_ERROR "expected DVD, Blu-ray, and remote interlaced MPEG-2 paths to emit -field_order tt; found ${FIELD_ORDER_COUNT}")
 endif()
 
 string(FIND "${AUTHOR}" "tinterlace=mode=interleave_top,setfield=tff" FILTER_TFF_POS)

@@ -22,7 +22,7 @@ foreach(NEEDED
     "defaults/titleEncoding"
     "defaults/menuEncoding"
     "Defaults for &new projects…"
-    "titles_=new QTableWidget(0,19)"
+    "titles_=new QTableWidget(0,20)"
     "Audio bitrate"
     "Force re-encode"
     "force_reencode_new_titles"

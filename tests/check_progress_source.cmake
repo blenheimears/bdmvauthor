@@ -16,12 +16,12 @@ endforeach()
 foreach(needle
     "-nostats -stats_period 0.25 -progress"
     "std::async(std::launch::async"
-    "read_ffmpeg_progress_seconds"
+    "read_ffmpeg_progress_snapshot"
     "probe_duration_seconds"
     "total_video_work"
     "completed_video_work"
     "pass 1/2"
-    "encode_label << \"Encoding \" << title_label.str()"
+    "Queued "
     "dvd_progress_for_video"
 )
   string(FIND "${AUTHOR}" "${needle}" pos)

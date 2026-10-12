@@ -20,6 +20,7 @@ struct Context {
     fs::path source;
     fs::path output;
     std::string error;
+    std::vector<double> progress;
 };
 
 static void run_writer(Context& context) {
@@ -32,6 +33,7 @@ static void run_writer(Context& context) {
         options.automatic_bdmv_correction = false;
         options.automatic_hddvd_correction = false;
         options.verify_after_write = true;
+        options.progress = [&](double fraction) { context.progress.push_back(fraction); };
         options.grafts.push_back({context.source, ""});
         udf25::ImageWriter writer(std::move(options));
         (void)writer.build();
@@ -70,7 +72,7 @@ int main() {
         payload.close();
         if (!payload) throw std::runtime_error("cannot finish payload fixture");
 
-        Context context{source, output, {}};
+        Context context{source, output, {}, {}};
         constexpr std::size_t kSmallStack = 512 * 1024;
 #ifdef _WIN32
         const uintptr_t handle = _beginthreadex(nullptr, static_cast<unsigned>(kSmallStack),
@@ -94,6 +96,11 @@ int main() {
         if (pthread_join(thread, nullptr) != 0) throw std::runtime_error("pthread_join failed");
 #endif
         if (!context.error.empty()) throw std::runtime_error("writer failed: " + context.error);
+        if (context.progress.size() < 4 || context.progress.front() != 0.0 || context.progress.back() != 1.0)
+            throw std::runtime_error("UDF did not report initial, incremental and complete progress");
+        for (std::size_t i = 1; i < context.progress.size(); ++i)
+            if (context.progress[i] < context.progress[i - 1])
+                throw std::runtime_error("UDF progress must never decrease");
         if (!fs::exists(output) || fs::file_size(output) <= 2 * 1024 * 1024)
             throw std::runtime_error("writer did not produce the expected image");
 

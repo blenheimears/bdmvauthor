@@ -40,7 +40,7 @@ foreach(needle
 endforeach()
 
 file(READ "${SOURCE_DIR}/src/project_file.cpp" PROJECT)
-foreach(needle "repeat-begin" "repeat-end" "kProjectFormatVersion = 24")
+foreach(needle "repeat-begin" "repeat-end" "kProjectFormatVersion = 29")
   string(FIND "${PROJECT}" "${needle}" pos)
   if(pos EQUAL -1)
     message(FATAL_ERROR "missing repeat-group persistence marker: ${needle}")

@@ -20,7 +20,9 @@ foreach(needle
   "Building DVD-Video VIDEO_TS structure with dvdauthor"
   "-dvd-video -V"
   "Building DVD-Video UDF 1.02/ISO image with mkisofs -dvd-video"
-  "DVD-Video output cannot convert PGS subtitles"
+  "spumux_dvd_bitmap_subtitle"
+  "dvd_quantize_bitmap"
+  "BDSup2Sub"
   "DVD-Video supports at most 8 audio streams"
   "DVD-Video supports at most 32 subtitle streams"
 )

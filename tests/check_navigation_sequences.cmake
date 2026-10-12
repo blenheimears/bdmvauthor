@@ -51,7 +51,7 @@ foreach(NEEDED
   endif()
 endforeach()
 foreach(NEEDED
-    "kProjectFormatVersion = 24"
+    "kProjectFormatVersion = 29"
     "firstPlayActions"
     "repeatCount"
     "actions_json(button_action_sequence(b))"

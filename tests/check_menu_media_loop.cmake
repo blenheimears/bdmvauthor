@@ -12,7 +12,7 @@ foreach(needle
     "--menu-loop"
     "--no-menu-loop"
     "Loop menu audio/video"
-    "kProjectFormatVersion = 24")
+    "kProjectFormatVersion = 29")
   set(found FALSE)
   foreach(text "${MODEL}" "${PROJECT}" "${CLI}" "${GUI}")
     string(FIND "${text}" "${needle}" pos)

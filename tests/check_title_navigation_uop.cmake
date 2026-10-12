@@ -17,7 +17,7 @@ endforeach()
 
 file(READ "${SOURCE_DIR}/src/project_file.cpp" PROJECT_FILE)
 foreach(needle
-  "kProjectFormatVersion = 24"
+  "kProjectFormatVersion = 29"
   "menuButtonActions"
   "prohibitedUserOperations"
   "user_operations_json"

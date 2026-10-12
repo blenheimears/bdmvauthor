@@ -22,7 +22,7 @@ endif()
 foreach(needle
     "md / \"menu-audio-channels\""
     "md / \"menu-audio-cache-channels\""
-    "track_dir, source_track.source_ordinal)")
+    "track_dir, source_track.source_ordinal,")
   string(FIND "${A}" "${needle}" POS)
   if(POS EQUAL -1)
     message(FATAL_ERROR "nested audio probe call-site regression: missing ${needle}")

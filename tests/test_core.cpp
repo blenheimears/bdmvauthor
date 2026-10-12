@@ -2,6 +2,7 @@
 #include "bdmvauthor/author.hpp"
 #include "bdmvauthor/audio_tools.hpp"
 #include "bdmvauthor/compliance.hpp"
+#include "bdmvauthor/dvd_mux.hpp"
 #include "bdmvauthor/hdmv.hpp"
 #include "bdmvauthor/progress.hpp"
 #include "bdmvauthor/media_fingerprint.hpp"
@@ -217,6 +218,15 @@ void check_menu_ics(const Bytes& ics, const std::vector<std::array<unsigned,4>>&
 
 int main() {
     {
+        Title title;
+        AudioStreamSettings audio;audio.source_ordinal=1;audio.removed=true;title.audio_stream_settings.push_back(audio);
+        SubtitleStreamSettings subtitle;subtitle.source_ordinal=2;subtitle.removed=true;title.subtitle_stream_settings.push_back(subtitle);
+        req(!audio_stream_removed(title,0),"unconfigured audio stream removal regression");
+        req(audio_stream_removed(title,1),"configured audio stream removal regression");
+        req(!subtitle_stream_removed(title,1),"unconfigured subtitle stream removal regression");
+        req(subtitle_stream_removed(title,2),"configured subtitle stream removal regression");
+    }
+    {
         req(target_max_combined_av_bitrate_kbps(DiscTarget::BluRay1080) == 48000, "Blu-ray combined AV ceiling regression");
         req(target_max_combined_av_bitrate_kbps(DiscTarget::UltraHdBluRay2160) == 70000, "UHD combined AV ceiling regression");
         req(target_max_combined_av_bitrate_kbps(DiscTarget::DvdVideo480p) == 10080, "DVD combined AV ceiling regression");
@@ -224,6 +234,14 @@ int main() {
         req(runtime_limits.combined_transport_bitrate_kbps(DiscTarget::BluRay1080) == 48000, "Blu-ray runtime transport default regression");
         req(runtime_limits.combined_transport_bitrate_kbps(DiscTarget::UltraHdBluRay2160) == 70000, "UHD runtime transport default regression");
         req(runtime_limits.combined_transport_bitrate_kbps(DiscTarget::DvdVideo480p) == 10080, "DVD runtime transport default regression");
+        req(dvd_mplex_estimated_program_bitrate_bps(9632, 448) > 10080000LL,
+            "DVD mplex regression fixture must reproduce the 9.632 Mb/s + 448 kb/s overflow");
+        req(dvd_mplex_safe_video_bitrate_kbps(10080, 448, 9800) == 9385,
+            "DVD mplex-aware 448 kb/s AC-3 video ceiling regression");
+        req(dvd_mplex_safe_video_bitrate_kbps(10080, 0, 9800) == 9800,
+            "DVD video-only streams should retain the 9.8 Mb/s codec ceiling");
+        req(dvd_mplex_estimated_program_bitrate_bps(9385, 448) <= 10048000LL,
+            "DVD mplex-aware ceiling must retain the packetization safety margin");
         runtime_limits.bluray_transport_bitrate_kbps = 90000;
         runtime_limits.dvd_transport_bitrate_kbps = 20000;
         req(runtime_limits.combined_transport_bitrate_kbps(DiscTarget::BluRay1080) == 48000, "normal mode must clamp a debug transport setting to the Blu-ray standard");
@@ -277,21 +295,46 @@ int main() {
         req(normal_rejected, "normal mode must reject video average/maxrate above the Blu-ray format ceiling");
         AuthorEngine::validate_encoding_profile_for_target(over_limit, DiscTarget::BluRay1080, "debug rate-limit test", true);
         EncodingProfile audio_over_limit = defaults.menu.encoding;
+#if defined(BDMVAUTHOR_HAVE_EAC371ENC)
+        // With the optional 7.1 helper, Blu-ray/UHD may use rates above 640 kb/s
+        // because this field is the total AC-3 core + dependent E-AC-3 rate.
+        audio_over_limit.ac3_bitrate_kbps = target_max_ac3_71_bitrate_kbps(DiscTarget::BluRay1080) + 1;
+#else
         audio_over_limit.ac3_bitrate_kbps = 900;
+#endif
         bool normal_audio_rejected = false;
         try { AuthorEngine::validate_encoding_profile_for_target(audio_over_limit, DiscTarget::BluRay1080, "audio rate-limit test"); }
         catch (const std::exception&) { normal_audio_rejected = true; }
-        req(normal_audio_rejected, "normal mode must reject AC-3 bitrate above the format ceiling");
+        req(normal_audio_rejected, "normal mode must reject AC-3 bitrate above the selected format ceiling");
         AuthorEngine::validate_encoding_profile_for_target(audio_over_limit, DiscTarget::BluRay1080, "debug audio rate-limit test", true);
+        req(target_supports_ac3_71_extension(DiscTarget::BluRay1080) && target_supports_ac3_71_extension(DiscTarget::UltraHdBluRay2160),
+            "Blu-ray and UHD must permit the optional dependent E-AC-3 7.1 extension");
+        req(!target_supports_ac3_71_extension(DiscTarget::DvdVideo480p) && !target_supports_ac3_71_extension(DiscTarget::Avchd),
+            "DVD-Video and AVCHD must never permit dependent E-AC-3 7.1 extension output");
+        req(target_max_ac3_71_bitrate_kbps(DiscTarget::DvdVideo480p)==448 && target_max_ac3_71_bitrate_kbps(DiscTarget::Avchd)==640,
+            "non-E-AC-3 targets must retain their plain AC-3 bitrate ceilings");
         req(defaults.menu.width==kProjectDesignWidth&&defaults.menu.height==kProjectDesignHeight,"project menu design space must be 3840x2160");
         req(target_geometry(DiscTarget::BluRay1080).video_width==1920&&target_geometry(DiscTarget::BluRay1080).graphics_width==1920,"1080p target geometry regression");
         req(target_geometry(DiscTarget::UltraHdBluRay2160).video_width==3840&&target_geometry(DiscTarget::UltraHdBluRay2160).graphics_width==1920,"UHD target must use 4K primary video and 1080p BD graphics plane");
         req(target_geometry(DiscTarget::DvdVideo480p).video_width==720&&target_geometry(DiscTarget::DvdVideo480p).video_height==480,"DVD target geometry regression");
+        req(target_geometry(DiscTarget::Avchd).video_width==1920&&target_geometry(DiscTarget::Avchd).video_height==1080,"AVCHD target geometry regression");
         req(target_is_currently_authorable(DiscTarget::DvdVideo480p),"DVD target must be authorable");
+        req(target_is_currently_authorable(DiscTarget::Avchd),"AVCHD target must be authorable");
+        req(default_disc_capacity_bytes(DiscTarget::Avchd)==4'700'000'000ULL,"AVCHD default capacity must be single-layer DVD size");
+        req(video_codec_allowed_for_target(DiscTarget::Avchd,VideoCodec::X264),"AVCHD must accept AVC/H.264");
+        req(!video_codec_allowed_for_target(DiscTarget::Avchd,VideoCodec::Mpeg2)&&!video_codec_allowed_for_target(DiscTarget::Avchd,VideoCodec::Hevc)&&!video_codec_allowed_for_target(DiscTarget::Avchd,VideoCodec::Vc1),"AVCHD must reject MPEG-2, HEVC, and VC-1 video");
+        req(audio_codec_allowed_for_target(DiscTarget::Avchd,AudioCodec::Ac3)&&audio_codec_allowed_for_target(DiscTarget::Avchd,AudioCodec::Lpcm),"AVCHD must accept AC-3 and Linear PCM audio");
+        req(!audio_codec_allowed_for_target(DiscTarget::Avchd,AudioCodec::Dca)&&!audio_codec_allowed_for_target(DiscTarget::Avchd,AudioCodec::TrueHdAc3)&&!audio_codec_allowed_for_target(DiscTarget::Avchd,AudioCodec::Libhdma),"AVCHD must reject DTS, TrueHD, and DTS-HD MA audio");
+        req(lpcm_max_channels_for_target(DiscTarget::Avchd,48000)==8,"AVCHD Linear PCM must permit up to 7.1 channels");
+        req(video_codec_max_bitrate_kbps(DiscTarget::Avchd,VideoCodec::X264)==18000,"AVCHD optical-disc transport ceiling regression");
+        req(video_codec_allowed_for_target(DiscTarget::BluRay1080,VideoCodec::Vc1),"standard Blu-ray VC-1 legality must not depend on bundled vc1enc at build time");
+        req(audio_codec_allowed_for_target(DiscTarget::UltraHdBluRay2160,AudioCodec::Libhdma),"UHD libhdma legality must not depend on bundled hdmaenc at build time");
+        req(audio_codec_allowed_for_target(DiscTarget::BluRay1080,AudioCodec::Libhdma),"Blu-ray libhdma legality must not depend on bundled hdmaenc at build time");
+        req(!audio_codec_allowed_for_target(DiscTarget::DvdVideo480p,AudioCodec::Libhdma),"DVD must still reject DTS-HD MA/libhdma");
         Title chapter_defaults;req(chapter_defaults.chapter_mode==ChapterMode::SourceOrFiveMinute&&chapter_defaults.chapter_interval_seconds==300.0,"new titles must default to source chapters with five-minute fallback");
-        Title rate_defaults;req(rate_defaults.frame_rate=="inherit"&&rate_defaults.uhd_frame_rate=="inherit"&&rate_defaults.dvd_frame_rate=="inherit","new titles must inherit the project frame-rate default on every target");
-        req(rate_defaults.resolution=="auto"&&rate_defaults.uhd_resolution=="auto"&&rate_defaults.dvd_resolution=="auto","new titles must default to closest-source resolution selection on every target");
-        req(rate_defaults.aspect_ratio=="auto"&&rate_defaults.uhd_aspect_ratio=="auto"&&rate_defaults.dvd_aspect_ratio=="auto","new titles must default to source display aspect selection on every target");
+        Title rate_defaults;req(rate_defaults.frame_rate=="inherit"&&rate_defaults.uhd_frame_rate=="inherit"&&rate_defaults.avchd_frame_rate=="inherit"&&rate_defaults.dvd_frame_rate=="inherit","new titles must inherit the project frame-rate default on every target");
+        req(rate_defaults.resolution=="auto"&&rate_defaults.uhd_resolution=="auto"&&rate_defaults.avchd_resolution=="auto"&&rate_defaults.dvd_resolution=="auto","new titles must default to closest-source resolution selection on every target");
+        req(rate_defaults.aspect_ratio=="auto"&&rate_defaults.uhd_aspect_ratio=="auto"&&rate_defaults.avchd_aspect_ratio=="auto"&&rate_defaults.dvd_aspect_ratio=="auto","new titles must default to source display aspect selection on every target");
         req(defaults.menu_resolution=="1920x1080"&&defaults.menu_uhd_resolution=="1920x1080"&&defaults.menu_dvd_resolution=="720x480","menus must default to 1080p Blu-ray/UHD and NTSC full-D1 DVD; UHD 1080p is the VLC mouse-navigation compatibility default");
         req(defaults.menu_aspect_ratio=="16:9"&&defaults.menu_uhd_aspect_ratio=="16:9"&&defaults.menu_dvd_aspect_ratio=="16:9","menu aspect defaults must be independent and widescreen");
         menu_resolution_for_target(defaults,DiscTarget::DvdVideo480p)="704x480";menu_aspect_ratio_for_target(defaults,DiscTarget::DvdVideo480p)="4:3";
@@ -303,8 +346,11 @@ int main() {
         req(maximum_keyframe_interval_for_rate(DiscTarget::BluRay1080,VideoCodec::Mpeg2,24000.0/1001.0)==24,"23.976p MPEG-2 legal GOP maximum regression");
         req(maximum_keyframe_interval_for_rate(DiscTarget::DvdVideo480p,VideoCodec::Mpeg2,25.0,true)==15,"PAL DVD legal GOP maximum regression");
         req(maximum_keyframe_interval_for_rate(DiscTarget::DvdVideo480p,VideoCodec::Mpeg2,30000.0/1001.0,false)==18,"NTSC DVD legal GOP maximum regression");
-        frame_rate_for_target(rate_defaults,DiscTarget::BluRay1080)="24p";frame_rate_for_target(rate_defaults,DiscTarget::UltraHdBluRay2160)="50p";frame_rate_for_target(rate_defaults,DiscTarget::DvdVideo480p)="film-dvd";
-        req(frame_rate_for_target(rate_defaults,DiscTarget::BluRay1080)=="24p"&&frame_rate_for_target(rate_defaults,DiscTarget::UltraHdBluRay2160)=="50p"&&frame_rate_for_target(rate_defaults,DiscTarget::DvdVideo480p)=="film-dvd","per-target title frame-rate storage regression");
+        frame_rate_for_target(rate_defaults,DiscTarget::BluRay1080)="24p";frame_rate_for_target(rate_defaults,DiscTarget::UltraHdBluRay2160)="50p";frame_rate_for_target(rate_defaults,DiscTarget::Avchd)="59.94i";frame_rate_for_target(rate_defaults,DiscTarget::DvdVideo480p)="film-dvd";
+        req(frame_rate_for_target(rate_defaults,DiscTarget::BluRay1080)=="24p"&&frame_rate_for_target(rate_defaults,DiscTarget::UltraHdBluRay2160)=="50p"&&frame_rate_for_target(rate_defaults,DiscTarget::Avchd)=="59.94i"&&frame_rate_for_target(rate_defaults,DiscTarget::DvdVideo480p)=="film-dvd","per-target title frame-rate storage regression");
+        const auto avchd_default=default_avchd_encoding_profile();
+        req(avchd_default.video_codec==VideoCodec::X264&&avchd_default.video_bitrate_kbps==16000&&avchd_default.video_max_bitrate_kbps==18000,"AVCHD default AVC profile regression");
+        req(avchd_default.audio_codec==AudioCodec::Ac3&&avchd_default.ac3_bitrate_kbps==448,"AVCHD must default to AC-3 audio");
         req(defaults.menu.uhd_encoding.video_codec==VideoCodec::Hevc&&defaults.menu.uhd_encoding.video_bitrate_kbps==60000,"default UHD HEVC profile regression");
         req(defaults.menu.encoding.x264_preset == "medium", "default x264 preset regression");
         req(!defaults.menu.encoding.two_pass, "single-pass must be the default");
@@ -329,8 +375,8 @@ int main() {
         req(!audio_codec_has_configurable_bitrate(AudioCodec::Lpcm), "LPCM must not expose a target bitrate");
         EncodingProfile bitrate_profile;bitrate_profile.audio_codec=AudioCodec::Dca;set_audio_bitrate_kbps(bitrate_profile,768);req(bitrate_profile.dca_bitrate_kbps==768,"DTS bitrate setter regression");bitrate_profile.audio_codec=AudioCodec::TrueHdAc3;set_audio_bitrate_kbps(bitrate_profile,448);req(bitrate_profile.ac3_bitrate_kbps==448,"TrueHD AC-3 core bitrate setter regression");
 
-        NewProjectDefaults new_defaults;new_defaults.volume_label="DEFAULTDISC";new_defaults.disc_capacity_bytes=50000000000ULL;new_defaults.disc_uhd_capacity_bytes=25000000000ULL;new_defaults.disc_dvd_capacity_bytes=2660000000ULL;new_defaults.use_encode_cache=false;new_defaults.force_reencode_new_titles=true;new_defaults.title_encoding.video_bitrate_kbps=18000;new_defaults.title_encoding.audio_codec=AudioCodec::Dca;new_defaults.title_encoding.dca_bitrate_kbps=768;new_defaults.menu_encoding.video_codec=VideoCodec::Mpeg2;new_defaults.menu_encoding.video_bitrate_kbps=12000;new_defaults.menu_duration_seconds=45.0;new_defaults.menu_resolution="1280x720";new_defaults.menu_uhd_resolution="3840x2160";new_defaults.menu_dvd_resolution="720x576";new_defaults.button_style.font_size_px=36;new_defaults.button_width=640;new_defaults.button_height=72;new_defaults.label_font_size_px=50;new_defaults.subtitle_style.override_style=true;new_defaults.subtitle_style.font_size_px=34;new_defaults.subtitle_style.bottom_offset_px=30;
-        Project from_defaults;apply_new_project_defaults(from_defaults,new_defaults);req(from_defaults.volume_label=="DEFAULTDISC","new-project volume default regression");req(from_defaults.output_image.empty(),"new-project output path must remain empty until explicitly selected");req(!from_defaults.use_encode_cache,"new-project cache default regression");req(from_defaults.disc_capacity_bytes==50000000000ULL,"new-project Blu-ray size default regression");new_defaults.target=DiscTarget::UltraHdBluRay2160;apply_new_project_defaults(from_defaults,new_defaults);req(from_defaults.disc_capacity_bytes==25000000000ULL,"new-project UHD size default regression");new_defaults.target=DiscTarget::DvdVideo480p;apply_new_project_defaults(from_defaults,new_defaults);req(from_defaults.disc_capacity_bytes==2660000000ULL,"new-project DVD size default regression");new_defaults.target=DiscTarget::BluRay1080;apply_new_project_defaults(from_defaults,new_defaults);req(from_defaults.menu.encoding.video_codec==VideoCodec::Mpeg2&&from_defaults.menu.encoding.video_bitrate_kbps==12000,"new-project menu encoding defaults regression");req(from_defaults.menu.duration_seconds==45.0,"new-project menu duration default regression");req(from_defaults.menu_resolution=="1280x720"&&from_defaults.menu_uhd_resolution=="3840x2160"&&from_defaults.menu_dvd_resolution=="720x576","new-project per-target menu-resolution defaults regression");req(from_defaults.menu.default_button_style.font_size_px==36,"new-project button-style default regression");const auto title_from_defaults=make_title_from_defaults(new_defaults);req(title_from_defaults.encoding.video_bitrate_kbps==18000&&title_from_defaults.encoding.audio_codec==AudioCodec::Dca&&title_from_defaults.encoding.dca_bitrate_kbps==768,"new-title encoding defaults regression");req(title_from_defaults.force_reencode,"new-title force-reencode default regression");req(title_from_defaults.subtitle_default_style.override_style&&title_from_defaults.subtitle_default_style.font_size_px==34&&title_from_defaults.subtitle_default_style.bottom_offset_px==30,"new-title subtitle defaults regression");
+        NewProjectDefaults new_defaults;new_defaults.volume_label="DEFAULTDISC";new_defaults.disc_capacity_bytes=50000000000ULL;new_defaults.disc_uhd_capacity_bytes=25000000000ULL;new_defaults.disc_avchd_capacity_bytes=8'500'000'000ULL;new_defaults.disc_dvd_capacity_bytes=2660000000ULL;new_defaults.use_encode_cache=false;new_defaults.force_reencode_new_titles=true;new_defaults.title_encoding.video_bitrate_kbps=18000;new_defaults.title_encoding.audio_codec=AudioCodec::Dca;new_defaults.title_encoding.dca_bitrate_kbps=768;new_defaults.menu_encoding.video_codec=VideoCodec::Mpeg2;new_defaults.menu_encoding.video_bitrate_kbps=12000;new_defaults.menu_duration_seconds=45.0;new_defaults.menu_resolution="1280x720";new_defaults.menu_uhd_resolution="3840x2160";new_defaults.menu_dvd_resolution="720x576";new_defaults.button_style.font_size_px=36;new_defaults.button_width=640;new_defaults.button_height=72;new_defaults.label_font_size_px=50;new_defaults.subtitle_style.override_style=true;new_defaults.subtitle_style.font_size_px=34;new_defaults.subtitle_style.bottom_offset_px=30;
+        Project from_defaults;apply_new_project_defaults(from_defaults,new_defaults);req(from_defaults.volume_label=="DEFAULTDISC","new-project volume default regression");req(from_defaults.output_image.empty(),"new-project output path must remain empty until explicitly selected");req(!from_defaults.use_encode_cache,"new-project cache default regression");req(from_defaults.disc_capacity_bytes==50000000000ULL,"new-project Blu-ray size default regression");new_defaults.target=DiscTarget::UltraHdBluRay2160;apply_new_project_defaults(from_defaults,new_defaults);req(from_defaults.disc_capacity_bytes==25000000000ULL,"new-project UHD size default regression");new_defaults.target=DiscTarget::Avchd;apply_new_project_defaults(from_defaults,new_defaults);req(from_defaults.disc_capacity_bytes==8'500'000'000ULL,"new-project AVCHD size default regression");new_defaults.target=DiscTarget::DvdVideo480p;apply_new_project_defaults(from_defaults,new_defaults);req(from_defaults.disc_capacity_bytes==2660000000ULL,"new-project DVD size default regression");new_defaults.target=DiscTarget::BluRay1080;apply_new_project_defaults(from_defaults,new_defaults);req(from_defaults.menu.encoding.video_codec==VideoCodec::Mpeg2&&from_defaults.menu.encoding.video_bitrate_kbps==12000,"new-project menu encoding defaults regression");req(from_defaults.menu.duration_seconds==45.0,"new-project menu duration default regression");req(from_defaults.menu_resolution=="1280x720"&&from_defaults.menu_uhd_resolution=="3840x2160"&&from_defaults.menu_dvd_resolution=="720x576","new-project per-target menu-resolution defaults regression");req(from_defaults.menu.default_button_style.font_size_px==36,"new-project button-style default regression");const auto title_from_defaults=make_title_from_defaults(new_defaults);req(title_from_defaults.encoding.video_bitrate_kbps==18000&&title_from_defaults.encoding.audio_codec==AudioCodec::Dca&&title_from_defaults.encoding.dca_bitrate_kbps==768,"new-title encoding defaults regression");req(title_from_defaults.force_reencode,"new-title force-reencode default regression");req(title_from_defaults.subtitle_default_style.override_style&&title_from_defaults.subtitle_default_style.font_size_px==34&&title_from_defaults.subtitle_default_style.bottom_offset_px==30,"new-title subtitle defaults regression");
 
         VideoStreamInfo avc;
         avc.codec_name="h264";avc.profile="High";avc.pixel_format="yuv420p";avc.field_order="progressive";avc.sample_aspect_ratio="1:1";
@@ -824,6 +870,74 @@ int main() {
         MenuButton bad_link;bad_link.label="Broken";bad_link.bounds={600,100,300,80};bad_link.target_kind=MenuButtonTargetKind::Menu;bad_link.target_menu_id="missing";tree_project.menu.buttons.push_back(bad_link);
         bool rejected=false;try{AuthorEngine::validate_project(tree_project);}catch(const std::exception&){rejected=true;}
         req(rejected,"unknown submenu target must be rejected");
+
+        // Validation is target-scoped. A project keeps independent Blu-ray, UHD,
+        // and DVD profiles, so stale/incompatible settings for inactive targets
+        // must not reject the target currently being authored. Audio-stream
+        // overrides likewise use only audio fields from their EncodingProfile.
+        Project uhd_project;
+        uhd_project.target=DiscTarget::UltraHdBluRay2160;
+        uhd_project.output_image=tree_tmp/"uhd.iso";
+        uhd_project.menu.id.clear();
+        Title uhd_title;
+        uhd_title.name="UHD feature";
+        uhd_title.source=fake_video;
+        uhd_title.encoding.video_codec=VideoCodec::Hevc; // intentionally illegal for standard Blu-ray
+        uhd_title.dvd_encoding.audio_codec=AudioCodec::TrueHdAc3; // intentionally illegal for DVD
+        AudioStreamSettings uhd_audio;
+        uhd_audio.source_ordinal=0;
+        uhd_audio.override_encoding=true;
+        uhd_audio.encoding.video_codec=VideoCodec::Hevc; // inactive and illegal for standard Blu-ray
+        uhd_audio.dvd_encoding.audio_codec=AudioCodec::TrueHdAc3; // inactive and illegal for DVD
+        uhd_audio.uhd_encoding=default_uhd_encoding_profile();
+        uhd_audio.uhd_encoding.video_codec=VideoCodec::Mpeg2; // ignored: stream overrides only contribute audio fields
+        uhd_audio.uhd_encoding.audio_codec=AudioCodec::TrueHdAc3;
+        uhd_title.audio_stream_settings.push_back(uhd_audio);
+        uhd_project.titles.push_back(uhd_title);
+        AuthorEngine::validate_project(uhd_project);
+        uhd_project.titles[0].audio_stream_settings[0].uhd_encoding.audio_codec=AudioCodec::Ac3;
+        uhd_project.titles[0].audio_stream_settings[0].uhd_encoding.ac3_bitrate_kbps=100;
+        bool active_audio_rejected=false;
+        try{AuthorEngine::validate_project(uhd_project);}catch(const std::exception&){active_audio_rejected=true;}
+        req(active_audio_rejected,"active-target audio override must still be validated");
+
+        Project avchd_project;
+        avchd_project.target=DiscTarget::Avchd;
+        avchd_project.output_image=tree_tmp/"avchd.iso";
+        avchd_project.menu.id.clear();
+        avchd_project.menu.name.clear();
+        Title avchd_title;
+        avchd_title.name="AVCHD feature";
+        avchd_title.source=fake_video;
+        avchd_title.avchd_encoding=default_avchd_encoding_profile();
+        avchd_project.titles.push_back(avchd_title);
+        AuthorEngine::validate_project(avchd_project);
+        avchd_project.menu.id="top";
+        bool avchd_menu_rejected=false;
+        try{AuthorEngine::validate_project(avchd_project);}catch(const std::exception&){avchd_menu_rejected=true;}
+        req(avchd_menu_rejected,"BDMV Author AVCHD export must reject menus");
+        avchd_project.menu.id.clear();
+        avchd_project.titles.push_back(avchd_title);
+        bool avchd_multi_title_rejected=false;
+        try{AuthorEngine::validate_project(avchd_project);}catch(const std::exception&){avchd_multi_title_rejected=true;}
+        req(avchd_multi_title_rejected,"BDMV Author AVCHD export must reject more than one title");
+        avchd_project.titles.resize(1);
+        avchd_project.titles[0].avchd_encoding.audio_codec=AudioCodec::Dca;
+        bool avchd_dts_rejected=false;
+        try{AuthorEngine::validate_project(avchd_project);}catch(const std::exception&){avchd_dts_rejected=true;}
+        req(avchd_dts_rejected,"AVCHD must reject DTS audio");
+        avchd_project.titles[0].avchd_encoding.audio_codec=AudioCodec::Ac3;
+        avchd_project.titles[0].avchd_encoding.ac3_bitrate_kbps=64;
+        AuthorEngine::validate_project(avchd_project);
+        AudioStreamSettings avchd_71;
+        avchd_71.source_ordinal=0;
+        avchd_71.output_channels=8;
+        avchd_project.titles[0].audio_stream_settings.push_back(avchd_71);
+        bool avchd_71_rejected=false;
+        try{AuthorEngine::validate_project(avchd_project);}catch(const std::exception&){avchd_71_rejected=true;}
+        req(avchd_71_rejected,"AVCHD must reject the AC-3 dependent E-AC-3 7.1 extension");
+        avchd_project.titles[0].audio_stream_settings.clear();
+
         std::filesystem::remove_all(tree_tmp);
 
         const auto audio_tmp = std::filesystem::temp_directory_path() / "bdmvauthor-test-truehd-core";

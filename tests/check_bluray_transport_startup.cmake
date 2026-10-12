@@ -4,7 +4,8 @@ file(READ "${SOURCE_DIR}/third_party/tsmuxer/tsMuxer/tsMuxer.cpp" TSMUXER)
 file(READ "${SOURCE_DIR}/third_party/tsmuxer/tsMuxer/tsMuxer.h" TSMUXER_H)
 
 foreach(needle
-  "--new-audio-pes --start-time="
+  "--new-audio-pes"
+  "--start-time="
   "max_transport_bitrate_kbps"
   "s << \" --maxbitrate=\" << max_transport_bitrate_kbps << \" --vbv-len=950\""
   "finite transport pacing ceiling"
