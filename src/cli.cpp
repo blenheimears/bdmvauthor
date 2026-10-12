@@ -20,11 +20,11 @@ using namespace bdmvauthor;
 
 namespace {
 void usage() {
-    std::cout << "BDMV Author " BDMVAUTHOR_VERSION " - Blu-ray / Ultra HD Blu-ray / DVD-Video authoring\n\n" R"(Usage:
+    std::cout << "BDMV Author " BDMVAUTHOR_VERSION " - Blu-ray / Ultra HD Blu-ray / AVCHD / DVD-Video authoring\n\n" R"(Usage:
   bdmvauthor-cli -o PATH [options] video1 [per-title options] video2 ...
 
 General options:
-  --target MODE                 bluray-1080 (default), uhd-bluray-2160, or dvd-video-480p
+  --target MODE                 bluray-1080 (default), uhd-bluray-2160, avchd, or dvd-video-480p
   --size-target SIZE            Disc-image capacity in decimal GB (presets include 1.46/2.66 GB 8 cm DVD,
                                7.8/15.6 GB 8 cm BD, 4.7/8.5/25/50/66/100 GB), or unlimited
   --automatic-bitrate           Maximize video bitrate while fitting the selected size (default)
@@ -94,13 +94,32 @@ General options:
   --auto-back                 Enable it again (default for submenus)
   --ffmpeg PATH               ffmpeg executable
   --ffprobe PATH              ffprobe executable
+  --hdmaenc PATH              Optional experimental libhdma command-line frontend
   --x264 PATH                 x264 executable
   --x265 PATH                 x265 executable
   --h264-provider MODE        ffmpeg (default) or x264
   --hevc-provider MODE        ffmpeg (default) or x265
+  --filter-scale BACKEND       Video scaling: software (Lanczos, default), native (scale+pad), vaapi, qsv, cuda, vulkan
+  --filter-tonemap BACKEND     HDR10->SDR: software (default), software-fast (scale first), vaapi
+  --filter-device PATH        Hardware filter device/render node (optional)
+  --h264-hardware-encoder NAME Exact FFmpeg H.264 hardware encoder (for example h264_nvenc)
+  --hevc-hardware-encoder NAME Exact FFmpeg H.265 hardware encoder (for example hevc_vaapi)
+  --hardware-decoder MODE     FFmpeg -hwaccel backend; hardware decode falls back to software
+  --remote-encode HOST        Encode video/libhdma on HOST over SSH (one-pass; no remote temp files)
+  --remote-user USER          SSH user for remote encoding server
+  --ssh-port PORT             SSH port for remote encoding server (default 22)
+  --ssh PATH                  SSH client executable
+  --ssh-identity FILE         Optional SSH private-key file
+  --remote-ffmpeg COMMAND     Remote FFmpeg command/path (default ffmpeg)
+  --remote-x264 COMMAND       Remote x264 command/path (default x264)
+  --remote-x265 COMMAND       Remote x265 command/path (default x265)
+  --remote-vc1enc COMMAND     Remote vc1enc command/path (default vc1enc)
+  --remote-hdmaenc COMMAND    Remote hdmaenc command/path (default hdmaenc)
+  --remote-hardware-device PATH Optional remote FFmpeg device/render node (for example /dev/dri/renderD128)
   --tsmuxer PATH              Override bundled tsMuxer executable
   --dvdauthor PATH            dvdauthor executable for DVD-Video
   --spumux PATH               spumux executable for DVD menu/subtitle SPUs
+  --bdsup2sub PATH            Native PGS/DVD/HD-DVD bitmap subtitle converter (optional)
   --mplex PATH                mplex executable for DVD NAV-sector multiplexing
   --mkisofs PATH              mkisofs executable for DVD-Video ISO creation
   --cache                     Enable both persistent caches (compatibility alias; default)
@@ -118,18 +137,26 @@ General options:
 Per-title encoding options:
   These options apply to each video argument that follows them, so they can be
   changed between clips.
-  --video-codec MODE          1080p: x264/mpeg2; UHD: hevc or x264 (1080p23.976/24); DVD: mpeg2 only
+  --video-codec MODE          1080p: x264/h264-hardware/mpeg2/vc1; UHD: hevc/hevc-hardware or AVC at legal 1080p rates; DVD: mpeg2 only
   --video-bitrate KBPS        Manual video bitrate for following titles; disables automatic bitrate
   --video-minrate KBPS        Minimum video rate (default 0; target/codec limit enforced)
   --video-maxrate KBPS        Maximum video rate (default = target/codec standard maximum)
   --x264-preset PRESET        x264 preset for 1080p fallback
   --x265-preset PRESET        libx265 preset for UHD fallback
+  --vc1-preset PRESET         vc1enc preset: normal/fast (experimental)
   --two-pass                  Enable two-pass video encoding
+  --fast-first-pass           Fast first pass (x264 default; x265 turbo), default on
+  --slow-first-pass           Use full encoder analysis on pass 1
   --single-pass               Use single-pass encoding (default)
-  --audio-codec MODE          Blu-ray/UHD: ac3, lpcm, dca, truehd-ac3; DVD: ac3/lpcm
-  --audio-bitrate KBPS        AC-3/DTS bitrate; DVD AC-3 is limited to 448 kb/s
-  --audio-sample-rate HZ      LPCM/TrueHD rate: auto, 48000, 96000, 192000 (DVD defaults 48000)
-  --audio-bit-depth BITS      LPCM/TrueHD depth: auto, 16, 24 (DVD defaults 16)
+  --audio-codec MODE          Blu-ray/UHD: ac3, lpcm, dca, thd-ac3; DVD: ac3/lpcm
+  --audio-bitrate KBPS        AC-3/DCA bitrate. With optional 7.1 AC-3 support,
+                              this is the TOTAL AC-3 core + E-AC-3 extension rate
+                              for 7.1; <=5.1 remains ordinary FFmpeg AC-3.
+                              E-AC-3/7.1 extension output is Blu-ray/UHD only;
+                              DVD and AVCHD always use plain AC-3. DVD AC-3 is
+                              limited to 448 kb/s.
+  --audio-sample-rate HZ      LPCM/THD rate: auto, 48000, 96000, 192000 (DVD defaults 48000)
+  --audio-bit-depth BITS      LPCM/THD depth: auto, 16, 24 (DVD defaults 16)
   --force-reencode            Force video and audio encoding for following titles
   --allow-passthrough         Remux compliant streams for following titles (default)
   --title-resolution RES      Per-title raster: auto (default) or a legal target raster
@@ -143,11 +170,12 @@ Per-title encoding options:
   --clear-video-options      Clear advanced options for the selected title video codec
   --clear-audio-options      Clear advanced options for the selected title audio codec
   --audio-stream-codec S MODE Override audio stream S codec for following titles
-  --audio-stream-bitrate S K  Override AC-3/DTS bitrate for audio stream S
+  --audio-stream-bitrate S K  Override AC-3/DCA bitrate for audio stream S; for
+                              7.1 AC-3 this is the total core+extension bitrate
   --audio-stream-sample-rate S HZ
-                              LPCM/TrueHD rate: auto, 48000, 96000, 192000
+                              LPCM/THD rate: auto, 48000, 96000, 192000
   --audio-stream-bit-depth S BITS
-                              LPCM/TrueHD depth: auto, 16, 24
+                              LPCM/THD depth: auto, 16, 24
   --audio-stream-lpcm-rate S HZ
                               Legacy alias selecting LPCM plus an explicit rate
   --audio-stream-lpcm-depth S BITS
@@ -170,6 +198,7 @@ Per-title encoding options:
   --subtitle-stream-clear-style S
                               Restore backend-default subtitle rendering for stream S
   --subtitle-file FILE        Attach an external subtitle file to following titles
+                              Supports text, Blu-ray/HD-DVD .sup and DVD .idx/.sub subtitles
   --subtitle-file-language ISO3
                               Set the language of the most recently attached subtitle file
   --subtitle-file-style KEY=VALUE
@@ -183,18 +212,21 @@ Per-title encoding options:
   --no-chapters               No additional chapter divisions
 
 Menu encoding options:
-  --menu-video-codec MODE     1080p: x264/mpeg2; UHD: hevc or x264 (1080p23.976/24); DVD: mpeg2 only
+  --menu-video-codec MODE     1080p: x264/h264-hardware/mpeg2/vc1; UHD: hevc/hevc-hardware or AVC at legal 1080p rates; DVD: mpeg2 only
   --menu-video-bitrate KBPS   Manual menu video bitrate; disables automatic bitrate
   --menu-video-minrate KBPS   Minimum menu video rate (default 0)
   --menu-video-maxrate KBPS   Maximum menu video rate (default = target/codec maximum)
   --menu-x264-preset PRESET   Menu x264 preset; default medium
   --menu-x265-preset PRESET   Menu libx265 preset; default medium
+  --menu-vc1-preset PRESET    Menu libvc1 vc1enc preset; normal/fast
   --menu-two-pass             Enable two-pass menu video encoding
+  --menu-fast-first-pass      Fast menu-video first pass (default)
+  --menu-slow-first-pass      Full menu-video first-pass analysis
   --menu-single-pass          Use single-pass menu encoding (default)
-  --menu-audio-codec MODE     Blu-ray/UHD: ac3, lpcm, dca, truehd-ac3; DVD: ac3/lpcm
+  --menu-audio-codec MODE     Blu-ray/UHD: ac3, lpcm, dca, thd-ac3; DVD: ac3/lpcm
   --menu-audio-bitrate KBPS   Menu audio bitrate; DVD AC-3 is limited to 448 kb/s
-  --menu-audio-sample-rate HZ LPCM/TrueHD rate: auto, 48000, 96000, 192000
-  --menu-audio-bit-depth BITS LPCM/TrueHD depth: auto, 16, 24
+  --menu-audio-sample-rate HZ LPCM/THD rate: auto, 48000, 96000, 192000
+  --menu-audio-bit-depth BITS LPCM/THD depth: auto, 16, 24
   --menu-keyframe-interval N  Menu GOP/keyframe interval in frames; 0 keeps the historical default
   --menu-video-option N=V    Add a codec-private option for the selected menu video codec
   --menu-audio-option N=V    Add a codec-private option for the selected menu audio codec
@@ -271,7 +303,7 @@ Notes:
   elementary streams are checked independently and remuxed when Blu-ray
   compliant; selected encoding options are fallbacks for streams that fail.
 
-  truehd-ac3 is experimental. It encodes TrueHD plus a configurable AC-3
+  thd-ac3 is experimental. It encodes THD plus a configurable AC-3
   compatibility stream and interleaves them for Blu-ray/tsMuxer input.
 
   -h, --help                  Show this help
@@ -279,17 +311,21 @@ Notes:
 }
 
 VideoCodec parse_video_codec(const std::string& s) {
-    if (s == "x264") return VideoCodec::X264;
+    if (s == "x264" || s == "h264" || s == "h.264") return VideoCodec::X264;
+    if (s == "h264-hardware" || s == "avc-hardware" || s == "h.264-hardware") return VideoCodec::H264Hardware;
     if (s == "mpeg2" || s == "mpeg-2") return VideoCodec::Mpeg2;
     if (s == "hevc" || s == "h265" || s == "h.265") return VideoCodec::Hevc;
-    throw std::runtime_error("video codec must be x264, mpeg2, or hevc");
+    if (s == "hevc-hardware" || s == "h265-hardware" || s == "h.265-hardware") return VideoCodec::HevcHardware;
+    if (s == "vc1" || s == "vc-1" || s == "wvc1") return VideoCodec::Vc1;
+    throw std::runtime_error("video codec must be x264/h264, h264-hardware, mpeg2, hevc/h265, hevc-hardware, or vc1 (libvc1 VC-1, experimental when built)");
 }
 
 DiscTarget parse_target(const std::string& s) {
     if (s == "bluray-1080" || s == "bluray" || s == "1080p") return DiscTarget::BluRay1080;
     if (s == "uhd-bluray-2160" || s == "uhd" || s == "2160p" || s == "4k") return DiscTarget::UltraHdBluRay2160;
+    if (s == "avchd") return DiscTarget::Avchd;
     if (s == "dvd-video-480p" || s == "dvd" || s == "480p") return DiscTarget::DvdVideo480p;
-    throw std::runtime_error("target must be bluray-1080, uhd-bluray-2160, or dvd-video-480p");
+    throw std::runtime_error("target must be bluray-1080, uhd-bluray-2160, avchd, or dvd-video-480p");
 }
 
 std::uint64_t parse_size_target(std::string text) {
@@ -309,8 +345,9 @@ AudioCodec parse_audio_codec(const std::string& s) {
     if (s == "ac3" || s == "ac-3") return AudioCodec::Ac3;
     if (s == "lpcm" || s == "pcm") return AudioCodec::Lpcm;
     if (s == "dca" || s == "dts") return AudioCodec::Dca;
-    if (s == "truehd-ac3" || s == "truehd+ac3" || s == "truehd") return AudioCodec::TrueHdAc3;
-    throw std::runtime_error("audio codec must be ac3, lpcm, dca, or truehd-ac3");
+    if (s == "thd-ac3" || s == "thd" || s == "truehd-ac3" || s == "truehd+ac3" || s == "truehd") return AudioCodec::TrueHdAc3;
+    if (s == "libhdma") return AudioCodec::Libhdma;
+    throw std::runtime_error("audio codec must be ac3, lpcm, dca, thd-ac3, or libhdma (experimental)");
 }
 
 int parse_int(const std::string& text, const std::string& option) {
@@ -460,6 +497,7 @@ int main(int argc, char** argv) {
         ToolPaths tools;
         EncodingProfile next_title;
         EncodingProfile next_title_uhd = default_uhd_encoding_profile();
+        EncodingProfile next_title_avchd = default_avchd_encoding_profile();
         EncodingProfile next_title_dvd = default_dvd_encoding_profile();
         bool next_title_force_reencode = false;
         std::string next_title_resolution = "auto";
@@ -493,6 +531,7 @@ int main(int argc, char** argv) {
         auto current_title_encoding = [&]() -> EncodingProfile& {
             switch (p.target) {
                 case DiscTarget::UltraHdBluRay2160: return next_title_uhd;
+                case DiscTarget::Avchd: return next_title_avchd;
                 case DiscTarget::DvdVideo480p: return next_title_dvd;
                 case DiscTarget::BluRay1080: return next_title;
             }
@@ -505,6 +544,7 @@ int main(int argc, char** argv) {
                 it->second.source_ordinal = one_based - 1;
                 it->second.encoding = next_title;
                 it->second.uhd_encoding = next_title_uhd;
+                it->second.avchd_encoding = next_title_avchd;
                 it->second.dvd_encoding = next_title_dvd;
             }
             return it->second;
@@ -538,12 +578,14 @@ int main(int argc, char** argv) {
         auto require_video_codec_for_target = [&](VideoCodec codec, const std::string& option) {
             if (video_codec_allowed_for_target(p.target, codec)) return;
             if (p.target == DiscTarget::UltraHdBluRay2160) throw std::runtime_error(option + " allows hevc or x264/AVC for Ultra HD Blu-ray (AVC is limited to 1080p23.976/24)");
+            if (p.target == DiscTarget::Avchd) throw std::runtime_error(option + " allows only x264/AVC or H.264 hardware encoding for AVCHD");
             if (p.target == DiscTarget::DvdVideo480p) throw std::runtime_error(option + " allows only mpeg2 for DVD-Video");
-            throw std::runtime_error(option + " allows only x264 or mpeg2 for standard Blu-ray");
+            throw std::runtime_error(option + " allows x264, mpeg2, or experimental vc1 for standard Blu-ray");
         };
         auto require_audio_codec_for_target = [&](AudioCodec codec, const std::string& option) {
             if (audio_codec_allowed_for_target(p.target, codec)) return;
-            throw std::runtime_error(option + " allows only ac3 or lpcm for DVD-Video; DTS/DCA is intentionally excluded for player compatibility and TrueHD is not a DVD-Video codec");
+            if (p.target == DiscTarget::Avchd) throw std::runtime_error(option + " allows only ac3 or lpcm for AVCHD");
+            throw std::runtime_error(option + " allows only ac3 or lpcm for DVD-Video; DCA is intentionally excluded for player compatibility and THD is not a DVD-Video codec");
         };
         auto require_video_bitrate_for_target = [&](VideoCodec codec, int bitrate, const std::string& option) {
             const int maximum=video_codec_max_bitrate_kbps(p.target,codec);
@@ -561,8 +603,18 @@ int main(int argc, char** argv) {
                 throw std::runtime_error(option + " must be between 1 and " + std::to_string(maximum) + " kb/s for the selected target/codec");
         };
         auto require_audio_bitrate_for_target = [&](AudioCodec codec, int bitrate, const std::string& option) {
-            if (codec == AudioCodec::Ac3 && bitrate > target_max_ac3_bitrate_kbps(p.target))
-                throw std::runtime_error(option + " exceeds the " + std::to_string(target_max_ac3_bitrate_kbps(p.target)) + " kb/s AC-3 limit for the selected target");
+            if (codec != AudioCodec::Ac3) return;
+            int maximum = target_max_ac3_bitrate_kbps(p.target);
+#if defined(BDMVAUTHOR_HAVE_EAC371ENC)
+            if (target_supports_ac3_71_extension(p.target))
+                maximum = target_max_ac3_71_bitrate_kbps(p.target);
+#endif
+            if (bitrate > maximum) {
+                if (!target_supports_ac3_71_extension(p.target))
+                    throw std::runtime_error(option + " exceeds the " + std::to_string(maximum) + " kb/s AC-3 limit for the selected target; E-AC-3/7.1 extension output is not permitted for " +
+                        std::string(p.target == DiscTarget::DvdVideo480p ? "DVD-Video" : "AVCHD"));
+                throw std::runtime_error(option + " exceeds the " + std::to_string(maximum) + " kb/s total AC-3 core + E-AC-3 7.1 extension limit for the selected target");
+            }
         };
         auto current_overlay = [&]() -> MenuOverlay& {
             if (!overlay_index) throw std::runtime_error("label option requires --text-label or --image-label first");
@@ -653,13 +705,38 @@ int main(int argc, char** argv) {
             else if (a == "--label-roman") current_overlay().italic=false;
             else if (a == "--ffmpeg") tools.ffmpeg = value();
             else if (a == "--ffprobe") tools.ffprobe = value();
+            else if (a == "--hdmaenc") tools.hdmaenc = value();
             else if (a == "--x264") tools.x264 = value();
             else if (a == "--x265") tools.x265 = value();
             else if (a == "--h264-provider") { const auto v=value();if(v=="ffmpeg")tools.h264_provider=VideoEncoderProvider::Ffmpeg;else if(v=="x264")tools.h264_provider=VideoEncoderProvider::Standalone;else throw std::runtime_error("--h264-provider must be ffmpeg or x264"); }
             else if (a == "--hevc-provider") { const auto v=value();if(v=="ffmpeg")tools.hevc_provider=VideoEncoderProvider::Ffmpeg;else if(v=="x265")tools.hevc_provider=VideoEncoderProvider::Standalone;else throw std::runtime_error("--hevc-provider must be ffmpeg or x265"); }
+            else if (a == "--h264-hardware-encoder") tools.h264_hardware_encoder = value();
+            else if (a == "--hevc-hardware-encoder") tools.hevc_hardware_encoder = value();
+            else if (a == "--hardware-decoder") tools.hardware_decoder = value();
+            else if (a == "--filter-scale") { tools.scaling_filter_backend=value();
+                if (tools.scaling_filter_backend!="software" && tools.scaling_filter_backend!="native" && tools.scaling_filter_backend!="vaapi" &&
+                    tools.scaling_filter_backend!="cuda" && tools.scaling_filter_backend!="vulkan" &&
+                    tools.scaling_filter_backend!="qsv")
+                    throw std::runtime_error("--filter-scale must be software, native, vaapi, qsv, cuda or vulkan"); }
+            else if (a == "--filter-tonemap") { tools.tonemap_filter_backend=value();
+                if (tools.tonemap_filter_backend!="software" && tools.tonemap_filter_backend!="software-fast" && tools.tonemap_filter_backend!="vaapi")
+                    throw std::runtime_error("--filter-tonemap must be software, software-fast or vaapi"); }
+            else if (a == "--filter-device") tools.filter_hardware_device=value();
+            else if (a == "--remote-encode") { tools.remote_encoding=true; tools.remote_host=value(); }
+            else if (a == "--remote-user") tools.remote_user=value();
+            else if (a == "--ssh-port") { const int port=parse_int(value(),a);if(port<1||port>65535)throw std::runtime_error("--ssh-port must be 1..65535");tools.remote_ssh_port=port; }
+            else if (a == "--ssh") tools.ssh=value();
+            else if (a == "--ssh-identity") tools.remote_identity_file=value();
+            else if (a == "--remote-ffmpeg") tools.remote_ffmpeg=value();
+            else if (a == "--remote-x264") tools.remote_x264=value();
+            else if (a == "--remote-x265") tools.remote_x265=value();
+            else if (a == "--remote-vc1enc") tools.remote_vc1enc=value();
+            else if (a == "--remote-hdmaenc") tools.remote_hdmaenc=value();
+            else if (a == "--remote-hardware-device") tools.remote_hardware_device=value();
             else if (a == "--tsmuxer") tools.tsmuxer = value();
             else if (a == "--dvdauthor") tools.dvdauthor = value();
             else if (a == "--spumux") tools.spumux = value();
+            else if (a == "--bdsup2sub") tools.bdsup2sub = value();
             else if (a == "--mplex") tools.mplex = value();
             else if (a == "--mkisofs") tools.mkisofs = value();
             else if (a == "--cache") { p.use_encode_cache = true; p.use_compliance_cache = true; }
@@ -678,15 +755,15 @@ int main(int argc, char** argv) {
             else if (a == "--title-frame-rate") next_title_frame_rate = value();
             else if (a == "--keyframe-interval") { const int n=parse_int(value(),a);if(n<0)throw std::runtime_error("--keyframe-interval must be >= 0");current_title_encoding().keyframe_interval_frames=n; }
             else if (a == "--video-option") { auto& e=current_title_encoding();append_advanced_codec_option(advanced_video_options_for_codec(e),value());validate_advanced_video_options(e,p.target); }
-            else if (a == "--audio-sample-rate") { auto v=value();auto& e=current_title_encoding();if(!lossless_audio_codec(e.audio_codec))throw std::runtime_error(a+" requires LPCM or TrueHD");e.lpcm_sample_rate_hz=(v=="auto"?0:parse_int(v,a));if(!lossless_sample_rate_allowed_for_target(p.target,e.lpcm_sample_rate_hz))throw std::runtime_error(a+" sample rate is not legal for the selected target"); }
-            else if (a == "--audio-bit-depth") { auto v=value();auto& e=current_title_encoding();if(!lossless_audio_codec(e.audio_codec))throw std::runtime_error(a+" requires LPCM or TrueHD");e.lpcm_bit_depth=(v=="auto"?0:parse_int(v,a));if(!lossless_bit_depth_supported_by_encoder(e.lpcm_bit_depth))throw std::runtime_error(a+" supports auto, 16 or 24"); }
+            else if (a == "--audio-sample-rate") { auto v=value();auto& e=current_title_encoding();if(!lossless_audio_codec(e.audio_codec))throw std::runtime_error(a+" requires LPCM, THD, or libhdma");e.lpcm_sample_rate_hz=(v=="auto"?0:parse_int(v,a));if(!lossless_sample_rate_allowed_for_target(p.target,e.lpcm_sample_rate_hz))throw std::runtime_error(a+" sample rate is not legal for the selected target"); }
+            else if (a == "--audio-bit-depth") { auto v=value();auto& e=current_title_encoding();if(!lossless_audio_codec(e.audio_codec))throw std::runtime_error(a+" requires LPCM, THD, or libhdma");e.lpcm_bit_depth=(v=="auto"?0:parse_int(v,a));if(!lossless_bit_depth_supported_by_encoder(e.lpcm_bit_depth))throw std::runtime_error(a+" supports auto, 16 or 24"); }
             else if (a == "--audio-option") { auto& e=current_title_encoding();append_advanced_codec_option(advanced_audio_options_for_codec(e),value());validate_advanced_audio_options(e,p.target); }
             else if (a == "--clear-video-options") { advanced_video_options_for_codec(current_title_encoding()).clear(); }
             else if (a == "--clear-audio-options") { advanced_audio_options_for_codec(current_title_encoding()).clear(); }
             else if (a == "--audio-stream-codec") { const int stream=parse_int(value(),a);auto& setting=pending_audio_stream(stream,a);auto& e=encoding_for_target(setting,p.target);const auto codec=parse_audio_codec(next_arg(i,a));require_audio_codec_for_target(codec,a);e.audio_codec=codec;setting.override_encoding=true; }
             else if (a == "--audio-stream-bitrate") { const int stream=parse_int(value(),a);const int bitrate=parse_int(next_arg(i,a),a);auto& setting=pending_audio_stream(stream,a);auto& e=encoding_for_target(setting,p.target);if(!audio_codec_has_configurable_bitrate(e.audio_codec))throw std::runtime_error(a+" cannot directly set bitrate for the selected stream codec");require_audio_bitrate_for_target(e.audio_codec,bitrate,a);set_audio_bitrate_kbps(e,bitrate);setting.override_encoding=true; }
-            else if (a == "--audio-stream-sample-rate") { const int stream=parse_int(value(),a);const auto token=next_arg(i,a);auto& setting=pending_audio_stream(stream,a);auto& e=encoding_for_target(setting,p.target);if(!lossless_audio_codec(e.audio_codec))throw std::runtime_error(a+" requires the stream codec to be LPCM or TrueHD");e.lpcm_sample_rate_hz=(token=="auto"?0:parse_int(token,a));if(!lossless_sample_rate_allowed_for_target(p.target,e.lpcm_sample_rate_hz))throw std::runtime_error(a+" sample rate is not legal for the selected target");setting.override_encoding=true; }
-            else if (a == "--audio-stream-bit-depth") { const int stream=parse_int(value(),a);const auto token=next_arg(i,a);auto& setting=pending_audio_stream(stream,a);auto& e=encoding_for_target(setting,p.target);if(!lossless_audio_codec(e.audio_codec))throw std::runtime_error(a+" requires the stream codec to be LPCM or TrueHD");e.lpcm_bit_depth=(token=="auto"?0:parse_int(token,a));if(!lossless_bit_depth_supported_by_encoder(e.lpcm_bit_depth))throw std::runtime_error(a+" supports auto, 16 or 24");setting.override_encoding=true; }
+            else if (a == "--audio-stream-sample-rate") { const int stream=parse_int(value(),a);const auto token=next_arg(i,a);auto& setting=pending_audio_stream(stream,a);auto& e=encoding_for_target(setting,p.target);if(!lossless_audio_codec(e.audio_codec))throw std::runtime_error(a+" requires the stream codec to be LPCM or THD");e.lpcm_sample_rate_hz=(token=="auto"?0:parse_int(token,a));if(!lossless_sample_rate_allowed_for_target(p.target,e.lpcm_sample_rate_hz))throw std::runtime_error(a+" sample rate is not legal for the selected target");setting.override_encoding=true; }
+            else if (a == "--audio-stream-bit-depth") { const int stream=parse_int(value(),a);const auto token=next_arg(i,a);auto& setting=pending_audio_stream(stream,a);auto& e=encoding_for_target(setting,p.target);if(!lossless_audio_codec(e.audio_codec))throw std::runtime_error(a+" requires the stream codec to be LPCM or THD");e.lpcm_bit_depth=(token=="auto"?0:parse_int(token,a));if(!lossless_bit_depth_supported_by_encoder(e.lpcm_bit_depth))throw std::runtime_error(a+" supports auto, 16 or 24");setting.override_encoding=true; }
             else if (a == "--audio-stream-lpcm-rate") { const int stream=parse_int(value(),a);const int rate=parse_int(next_arg(i,a),a);if(!lpcm_sample_rate_allowed_for_target(p.target,rate))throw std::runtime_error(a+" sample rate is not legal for the selected target");auto& setting=pending_audio_stream(stream,a);auto& e=encoding_for_target(setting,p.target);e.audio_codec=AudioCodec::Lpcm;e.lpcm_sample_rate_hz=rate;setting.override_encoding=true; }
             else if (a == "--audio-stream-lpcm-depth") { const int stream=parse_int(value(),a);const int bits=parse_int(next_arg(i,a),a);if(!lpcm_bit_depth_supported_by_encoder(bits))throw std::runtime_error(a+" supports 16 or 24 bits");auto& setting=pending_audio_stream(stream,a);auto& e=encoding_for_target(setting,p.target);e.audio_codec=AudioCodec::Lpcm;e.lpcm_bit_depth=bits;setting.override_encoding=true; }
             else if (a == "--audio-stream-option") { const int stream=parse_int(value(),a);auto& setting=pending_audio_stream(stream,a);auto& e=encoding_for_target(setting,p.target);append_advanced_codec_option(advanced_audio_options_for_codec(e),next_arg(i,a));validate_advanced_audio_options(e,p.target);setting.override_encoding=true; }
@@ -712,7 +789,10 @@ int main(int argc, char** argv) {
             else if (a == "--video-maxrate") { const int bitrate=parse_int(value(),a);require_video_maxrate_for_target(current_title_encoding().video_codec,bitrate,a);current_title_encoding().video_max_bitrate_kbps=bitrate; }
             else if (a == "--x264-preset") current_title_encoding().x264_preset = value();
             else if (a == "--x265-preset") current_title_encoding().x265_preset = value();
+            else if (a == "--vc1-preset") current_title_encoding().vc1_preset = value();
             else if (a == "--two-pass") current_title_encoding().two_pass = true;
+            else if (a == "--fast-first-pass") current_title_encoding().fast_first_pass = true;
+            else if (a == "--slow-first-pass") current_title_encoding().fast_first_pass = false;
             else if (a == "--single-pass") current_title_encoding().two_pass = false;
             else if (a == "--audio-codec") { const auto codec=parse_audio_codec(value());require_audio_codec_for_target(codec,a);current_title_encoding().audio_codec=codec;if(const auto it=next_title_audio_bitrate_overrides.find(p.target);it!=next_title_audio_bitrate_overrides.end()&&audio_codec_has_configurable_bitrate(codec)){require_audio_bitrate_for_target(codec,it->second,a);set_audio_bitrate_kbps(current_title_encoding(),it->second);} }
             else if (a == "--audio-bitrate") { const int bitrate=parse_int(value(),a);next_title_audio_bitrate_overrides[p.target]=bitrate;if(audio_codec_has_configurable_bitrate(current_title_encoding().audio_codec)){require_audio_bitrate_for_target(current_title_encoding().audio_codec,bitrate,a);set_audio_bitrate_kbps(current_title_encoding(),bitrate);} }
@@ -722,12 +802,15 @@ int main(int argc, char** argv) {
             else if (a == "--menu-video-maxrate") { auto& m=current_menu();const int bitrate=parse_int(value(),a);require_video_maxrate_for_target(current_menu_encoding().video_codec,bitrate,a);current_menu_encoding().video_max_bitrate_kbps=bitrate;m.inherit_encoding=false; }
             else if (a == "--menu-x264-preset") { auto& m=current_menu(); current_menu_encoding().x264_preset=value(); m.inherit_encoding=false; }
             else if (a == "--menu-x265-preset") { auto& m=current_menu(); current_menu_encoding().x265_preset=value(); m.inherit_encoding=false; }
+            else if (a == "--menu-vc1-preset") { auto& m=current_menu(); current_menu_encoding().vc1_preset=value(); m.inherit_encoding=false; }
             else if (a == "--menu-two-pass") { auto& m=current_menu(); current_menu_encoding().two_pass=true; m.inherit_encoding=false; }
+            else if (a == "--menu-fast-first-pass") { auto& m=current_menu(); current_menu_encoding().fast_first_pass=true; m.inherit_encoding=false; }
+            else if (a == "--menu-slow-first-pass") { auto& m=current_menu(); current_menu_encoding().fast_first_pass=false; m.inherit_encoding=false; }
             else if (a == "--menu-single-pass") { auto& m=current_menu(); current_menu_encoding().two_pass=false; m.inherit_encoding=false; }
             else if (a == "--menu-keyframe-interval") { auto& m=current_menu();const int n=parse_int(value(),a);if(n<0)throw std::runtime_error("--menu-keyframe-interval must be >= 0");current_menu_encoding().keyframe_interval_frames=n;m.inherit_encoding=false; }
             else if (a == "--menu-video-option") { auto& m=current_menu();auto& e=current_menu_encoding();append_advanced_codec_option(advanced_video_options_for_codec(e),value());validate_advanced_video_options(e,p.target);m.inherit_encoding=false; }
-            else if (a == "--menu-audio-sample-rate") { auto& m=current_menu();auto& e=current_menu_encoding();auto v=value();if(!lossless_audio_codec(e.audio_codec))throw std::runtime_error(a+" requires LPCM or TrueHD");e.lpcm_sample_rate_hz=(v=="auto"?0:parse_int(v,a));if(!lossless_sample_rate_allowed_for_target(p.target,e.lpcm_sample_rate_hz))throw std::runtime_error(a+" sample rate is not legal for the selected target");m.inherit_encoding=false; }
-            else if (a == "--menu-audio-bit-depth") { auto& m=current_menu();auto& e=current_menu_encoding();auto v=value();if(!lossless_audio_codec(e.audio_codec))throw std::runtime_error(a+" requires LPCM or TrueHD");e.lpcm_bit_depth=(v=="auto"?0:parse_int(v,a));if(!lossless_bit_depth_supported_by_encoder(e.lpcm_bit_depth))throw std::runtime_error(a+" supports auto, 16 or 24");m.inherit_encoding=false; }
+            else if (a == "--menu-audio-sample-rate") { auto& m=current_menu();auto& e=current_menu_encoding();auto v=value();if(!lossless_audio_codec(e.audio_codec))throw std::runtime_error(a+" requires LPCM, THD, or libhdma");e.lpcm_sample_rate_hz=(v=="auto"?0:parse_int(v,a));if(!lossless_sample_rate_allowed_for_target(p.target,e.lpcm_sample_rate_hz))throw std::runtime_error(a+" sample rate is not legal for the selected target");m.inherit_encoding=false; }
+            else if (a == "--menu-audio-bit-depth") { auto& m=current_menu();auto& e=current_menu_encoding();auto v=value();if(!lossless_audio_codec(e.audio_codec))throw std::runtime_error(a+" requires LPCM, THD, or libhdma");e.lpcm_bit_depth=(v=="auto"?0:parse_int(v,a));if(!lossless_bit_depth_supported_by_encoder(e.lpcm_bit_depth))throw std::runtime_error(a+" supports auto, 16 or 24");m.inherit_encoding=false; }
             else if (a == "--menu-audio-option") { auto& m=current_menu();auto& e=current_menu_encoding();append_advanced_codec_option(advanced_audio_options_for_codec(e),value());validate_advanced_audio_options(e,p.target);m.inherit_encoding=false; }
             else if (a == "--menu-clear-video-options") { auto& m=current_menu();advanced_video_options_for_codec(current_menu_encoding()).clear();m.inherit_encoding=false; }
             else if (a == "--menu-clear-audio-options") { auto& m=current_menu();advanced_audio_options_for_codec(current_menu_encoding()).clear();m.inherit_encoding=false; }
@@ -774,7 +857,7 @@ int main(int argc, char** argv) {
             else if (a == "--work") { p.work_directory = value(); p.keep_work_directory = true; }
             else if (!a.empty() && a[0] == '-') throw std::runtime_error("unknown option: " + a);
             else {
-                Title t; t.source = a; t.name = std::filesystem::path(a).stem().string(); t.encoding = next_title; t.uhd_encoding = next_title_uhd; t.dvd_encoding = next_title_dvd;
+                Title t; t.source = a; t.name = std::filesystem::path(a).stem().string(); t.encoding = next_title; t.uhd_encoding = next_title_uhd; t.avchd_encoding = next_title_avchd; t.dvd_encoding = next_title_dvd;
                 t.force_reencode = next_title_force_reencode;
                 resolution_for_target(t, p.target) = next_title_resolution;
                 aspect_ratio_for_target(t, p.target) = next_title_aspect;
@@ -832,6 +915,12 @@ int main(int argc, char** argv) {
             }
             std::cerr << "\r" << std::left << std::setw(140) << line.str() << std::flush;
             if (pct >= 100.0) std::cerr << "\n";
+        }, {}, [&](const EncodeJobProgress& ev) {
+            if (ev.diagnostic.empty()) return;
+            std::cerr << "\r" << std::string(160, ' ') << "\r"
+                      << "bdmvauthor: " << (ev.failure_type.empty() ? "encoding" : ev.failure_type)
+                      << " error on " << ev.worker << " while " << ev.job
+                      << " (attempt " << ev.attempt << "):\n" << ev.diagnostic << "\n" << std::flush;
         });
         return 0;
     } catch (const std::exception& e) {

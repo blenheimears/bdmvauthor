@@ -10,6 +10,11 @@
 #include <stdexcept>
 #include <utility>
 #include <cstdlib>
+#include <vector>
+
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
 
 #if defined(_WIN32) && (defined(BDMVAUTHOR_HAVE_FONTCONFIG) || defined(BDMVAUTHOR_HAVE_FREETYPE_FONTCONFIG))
 #include <windows.h>
@@ -101,6 +106,37 @@ void configure_bundled_fontconfig() {
         const auto config=std::filesystem::path(std::wstring(module.data(),n)).parent_path()/L"fontconfig"/L"fonts.conf";
         std::error_code ec;
         if(std::filesystem::is_regular_file(config,ec)&&!ec) (void)_wputenv_s(L"FONTCONFIG_FILE",config.c_str());
+        return true;
+    }();
+    (void)configured;
+}
+#elif defined(__APPLE__)
+void configure_bundled_fontconfig() {
+    static const bool configured=[] {
+        // Respect an explicit developer/user override. Finder-launched apps do
+        // not inherit a Nix shell environment, so otherwise use the private
+        // Fontconfig tree in Contents/Resources.
+        if(const char* existing=std::getenv("FONTCONFIG_FILE");existing&&*existing) return true;
+
+        std::uint32_t size=0;
+        (void)_NSGetExecutablePath(nullptr,&size);
+        if(size==0) return true;
+        std::vector<char> executable(size+1, '\0');
+        if(_NSGetExecutablePath(executable.data(),&size)!=0) return true;
+
+        std::error_code ec;
+        std::filesystem::path executable_path(executable.data());
+        const auto canonical=std::filesystem::weakly_canonical(executable_path,ec);
+        if(!ec) executable_path=canonical;
+        const auto config=executable_path.parent_path().parent_path()/"Resources"/"fontconfig"/"fonts.conf";
+        ec.clear();
+        if(!std::filesystem::is_regular_file(config,ec)||ec) return true;
+
+        const auto config_string=config.string();
+        const auto config_dir=config.parent_path().string();
+        (void)setenv("FONTCONFIG_FILE",config_string.c_str(),0);
+        if(const char* existing_path=std::getenv("FONTCONFIG_PATH");!existing_path||!*existing_path)
+            (void)setenv("FONTCONFIG_PATH",config_dir.c_str(),0);
         return true;
     }();
     (void)configured;

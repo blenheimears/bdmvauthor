@@ -32,7 +32,7 @@
 namespace bdmvauthor {
 namespace {
 
-constexpr int kProjectFormatVersion = 24;
+constexpr int kProjectFormatVersion = 29;
 
 [[noreturn]] void fail(const QString& message) {
     throw std::runtime_error(message.toStdString());
@@ -194,6 +194,7 @@ QString audio_name(AudioCodec v) {
         case AudioCodec::Lpcm: return "lpcm";
         case AudioCodec::Dca: return "dca";
         case AudioCodec::TrueHdAc3: return "truehd-ac3";
+        case AudioCodec::Libhdma: return "libhdma";
     }
     return "ac3";
 }
@@ -201,24 +202,32 @@ AudioCodec audio_from_name(const QString& s) {
     if (s == "lpcm") return AudioCodec::Lpcm;
     if (s == "dca") return AudioCodec::Dca;
     if (s == "truehd-ac3") return AudioCodec::TrueHdAc3;
+    if (s == "libhdma") return AudioCodec::Libhdma;
     return AudioCodec::Ac3;
 }
 QString video_name(VideoCodec v) {
     switch (v) {
         case VideoCodec::X264: return "x264";
+        case VideoCodec::H264Hardware: return "h264-hardware";
         case VideoCodec::Mpeg2: return "mpeg2";
         case VideoCodec::Hevc: return "hevc";
+        case VideoCodec::HevcHardware: return "hevc-hardware";
+        case VideoCodec::Vc1: return "vc1";
     }
     return "x264";
 }
 VideoCodec video_from_name(const QString& s) {
+    if (s == "h264-hardware") return VideoCodec::H264Hardware;
     if (s == "mpeg2") return VideoCodec::Mpeg2;
     if (s == "hevc") return VideoCodec::Hevc;
+    if (s == "hevc-hardware") return VideoCodec::HevcHardware;
+    if (s == "vc1") return VideoCodec::Vc1;
     return VideoCodec::X264;
 }
 QString target_name(DiscTarget target) {
     switch (target) {
         case DiscTarget::UltraHdBluRay2160: return "uhd-bluray-2160p";
+        case DiscTarget::Avchd: return "avchd";
         case DiscTarget::DvdVideo480p: return "dvd-video-480p";
         case DiscTarget::BluRay1080: return "bluray-1080p";
     }
@@ -226,6 +235,7 @@ QString target_name(DiscTarget target) {
 }
 DiscTarget target_from_name(const QString& s) {
     if (s == "uhd-bluray-2160p") return DiscTarget::UltraHdBluRay2160;
+    if (s == "avchd") return DiscTarget::Avchd;
     if (s == "dvd-video-480p") return DiscTarget::DvdVideo480p;
     return DiscTarget::BluRay1080;
 }
@@ -237,7 +247,9 @@ QJsonObject encoding_json(const EncodingProfile& e) {
             {"videoMaxrateKbps", e.video_max_bitrate_kbps},
             {"x264Preset", QString::fromStdString(e.x264_preset)},
             {"x265Preset", QString::fromStdString(e.x265_preset)},
+            {"vc1Preset", QString::fromStdString(e.vc1_preset)},
             {"twoPass", e.two_pass},
+            {"fastFirstPass", e.fast_first_pass},
             {"keyframeIntervalFrames", e.keyframe_interval_frames},
             {"audioCodec", audio_name(e.audio_codec)},
             {"ac3BitrateKbps", e.ac3_bitrate_kbps},
@@ -246,11 +258,15 @@ QJsonObject encoding_json(const EncodingProfile& e) {
             {"lpcmBitDepth", e.lpcm_bit_depth},
             {"x264AdvancedOptions", QString::fromStdString(e.x264_advanced_options)},
             {"x265AdvancedOptions", QString::fromStdString(e.x265_advanced_options)},
+            {"h264HardwareAdvancedOptions", QString::fromStdString(e.h264_hardware_advanced_options)},
+            {"hevcHardwareAdvancedOptions", QString::fromStdString(e.hevc_hardware_advanced_options)},
             {"mpeg2AdvancedOptions", QString::fromStdString(e.mpeg2_advanced_options)},
+            {"vc1AdvancedOptions", QString::fromStdString(e.vc1_advanced_options)},
             {"ac3AdvancedOptions", QString::fromStdString(e.ac3_advanced_options)},
             {"dcaAdvancedOptions", QString::fromStdString(e.dca_advanced_options)},
             {"lpcmAdvancedOptions", QString::fromStdString(e.lpcm_advanced_options)},
-            {"truehdAdvancedOptions", QString::fromStdString(e.truehd_advanced_options)}};
+            {"truehdAdvancedOptions", QString::fromStdString(e.truehd_advanced_options)},
+            {"hdmaAdvancedOptions", QString::fromStdString(e.hdma_advanced_options)}};
 }
 EncodingProfile encoding_from_json(const QJsonValue& v, EncodingProfile e = {}) {
     if (!v.isObject()) return e;
@@ -261,7 +277,9 @@ EncodingProfile encoding_from_json(const QJsonValue& v, EncodingProfile e = {}) 
     e.video_max_bitrate_kbps = o.value("videoMaxrateKbps").toInt(e.video_max_bitrate_kbps);
     e.x264_preset = o.value("x264Preset").toString(QString::fromStdString(e.x264_preset)).toStdString();
     e.x265_preset = o.value("x265Preset").toString(QString::fromStdString(e.x265_preset)).toStdString();
+    e.vc1_preset = o.value("vc1Preset").toString(QString::fromStdString(e.vc1_preset)).toStdString();
     e.two_pass = o.value("twoPass").toBool(e.two_pass);
+    e.fast_first_pass = o.value("fastFirstPass").toBool(e.fast_first_pass);
     e.keyframe_interval_frames = o.value("keyframeIntervalFrames").toInt(e.keyframe_interval_frames);
     e.audio_codec = audio_from_name(o.value("audioCodec").toString("ac3"));
     e.ac3_bitrate_kbps = o.value("ac3BitrateKbps").toInt(e.ac3_bitrate_kbps);
@@ -270,11 +288,15 @@ EncodingProfile encoding_from_json(const QJsonValue& v, EncodingProfile e = {}) 
     e.lpcm_bit_depth = o.value("lpcmBitDepth").toInt(e.lpcm_bit_depth);
     e.x264_advanced_options = o.value("x264AdvancedOptions").toString().toStdString();
     e.x265_advanced_options = o.value("x265AdvancedOptions").toString().toStdString();
+    e.h264_hardware_advanced_options = o.value("h264HardwareAdvancedOptions").toString().toStdString();
+    e.hevc_hardware_advanced_options = o.value("hevcHardwareAdvancedOptions").toString().toStdString();
     e.mpeg2_advanced_options = o.value("mpeg2AdvancedOptions").toString().toStdString();
+    e.vc1_advanced_options = o.value("vc1AdvancedOptions").toString().toStdString();
     e.ac3_advanced_options = o.value("ac3AdvancedOptions").toString().toStdString();
     e.dca_advanced_options = o.value("dcaAdvancedOptions").toString().toStdString();
     e.lpcm_advanced_options = o.value("lpcmAdvancedOptions").toString().toStdString();
     e.truehd_advanced_options = o.value("truehdAdvancedOptions").toString().toStdString();
+    e.hdma_advanced_options = o.value("hdmaAdvancedOptions").toString().toStdString();
     return e;
 }
 QJsonObject state_style_json(const ButtonStateStyle& s) {
@@ -595,6 +617,7 @@ QJsonObject menu_json(const Menu& m, FingerprintCache& cache) {
             {"defaultButtonStyle", style_json(m.default_button_style)}, {"width", m.width}, {"height", m.height},
             {"durationSeconds", m.duration_seconds}, {"loopMedia", m.loop_media}, {"blurayEncoding", encoding_json(m.encoding)},
             {"uhdEncoding", encoding_json(m.uhd_encoding)}, {"dvdEncoding", encoding_json(m.dvd_encoding)},
+            {"encodingWorker", QString::fromStdString(m.encoding_worker)}, {"encodingWorkerMode", static_cast<int>(m.encoding_worker_mode)},
             {"autoBackButton", m.auto_back_button}, {"backButton", button_json(m.back_button, cache)},
             {"submenus", children}};
 }
@@ -626,6 +649,8 @@ Menu menu_from_json(QWidget* parent, const QJsonValue& v, bool* cancelled, const
     m.encoding = encoding_from_json(o.contains("blurayEncoding") ? o.value("blurayEncoding") : o.value("encoding"), EncodingProfile{});
     m.uhd_encoding = o.contains("uhdEncoding") ? encoding_from_json(o.value("uhdEncoding"), default_uhd_encoding_profile()) : default_uhd_encoding_profile();
     m.dvd_encoding = o.contains("dvdEncoding") ? encoding_from_json(o.value("dvdEncoding"), default_dvd_encoding_profile()) : default_dvd_encoding_profile();
+    m.encoding_worker = o.value("encodingWorker").toString().toStdString();
+    m.encoding_worker_mode = static_cast<EncodingWorkerAffinityMode>(o.value("encodingWorkerMode").toInt(static_cast<int>(EncodingWorkerAffinityMode::Automatic)));
     m.auto_back_button = o.value("autoBackButton").toBool(m.auto_back_button);
     m.back_button = button_from_json(parent, o.value("backButton"), cancelled, context + " Back button");
     if (*cancelled) return m;
@@ -731,10 +756,13 @@ std::uint64_t user_operations_from_json(const QJsonValue& value) {
 QJsonObject audio_stream_settings_json(const AudioStreamSettings& stream) {
     return {{"sourceOrdinal", stream.source_ordinal},
             {"language", QString::fromStdString(stream.language)},
+            {"removed", stream.removed},
             {"overrideEncoding", stream.override_encoding},
             {"outputChannels", stream.output_channels},
+            {"encodingWorker", QString::fromStdString(stream.encoding_worker)}, {"encodingWorkerMode", static_cast<int>(stream.encoding_worker_mode)},
             {"blurayEncoding", encoding_json(stream.encoding)},
             {"uhdEncoding", encoding_json(stream.uhd_encoding)},
+            {"avchdEncoding", encoding_json(stream.avchd_encoding)},
             {"dvdEncoding", encoding_json(stream.dvd_encoding)}};
 }
 AudioStreamSettings audio_stream_settings_from_json(const QJsonValue& value) {
@@ -743,10 +771,14 @@ AudioStreamSettings audio_stream_settings_from_json(const QJsonValue& value) {
     const auto o = value.toObject();
     stream.source_ordinal = o.value("sourceOrdinal").toInt(0);
     stream.language = o.value("language").toString().toStdString();
+    stream.removed = o.value("removed").toBool(false);
     stream.override_encoding = o.value("overrideEncoding").toBool(false);
     stream.output_channels = o.value("outputChannels").toInt(0);
+    stream.encoding_worker = o.value("encodingWorker").toString().toStdString();
+    stream.encoding_worker_mode = static_cast<EncodingWorkerAffinityMode>(o.value("encodingWorkerMode").toInt(static_cast<int>(EncodingWorkerAffinityMode::Automatic)));
     stream.encoding = encoding_from_json(o.value("blurayEncoding"), EncodingProfile{});
     stream.uhd_encoding = o.contains("uhdEncoding") ? encoding_from_json(o.value("uhdEncoding"), default_uhd_encoding_profile()) : default_uhd_encoding_profile();
+    stream.avchd_encoding = o.contains("avchdEncoding") ? encoding_from_json(o.value("avchdEncoding"), default_avchd_encoding_profile()) : default_avchd_encoding_profile();
     stream.dvd_encoding = o.contains("dvdEncoding") ? encoding_from_json(o.value("dvdEncoding"), default_dvd_encoding_profile()) : default_dvd_encoding_profile();
     return stream;
 }
@@ -793,7 +825,7 @@ SubtitleStyle subtitle_style_from_json(const QJsonValue& value) {
 }
 QJsonObject subtitle_stream_settings_json(const SubtitleStreamSettings& stream) {
     return {{"sourceOrdinal", stream.source_ordinal}, {"language", QString::fromStdString(stream.language)},
-            {"style", subtitle_style_json(stream.style)}};
+            {"removed", stream.removed}, {"style", subtitle_style_json(stream.style)}};
 }
 SubtitleStreamSettings subtitle_stream_settings_from_json(const QJsonValue& value) {
     SubtitleStreamSettings stream;
@@ -801,6 +833,7 @@ SubtitleStreamSettings subtitle_stream_settings_from_json(const QJsonValue& valu
     const auto o = value.toObject();
     stream.source_ordinal = o.value("sourceOrdinal").toInt(0);
     stream.language = o.value("language").toString().toStdString();
+    stream.removed = o.value("removed").toBool(false);
     if (o.contains("style")) stream.style = subtitle_style_from_json(o.value("style"));
     return stream;
 }
@@ -820,15 +853,19 @@ QJsonObject title_json(const Title& t, FingerprintCache& cache) {
             {"chaptersSeconds", chapters},
             {"blurayFrameRate", QString::fromStdString(t.frame_rate)},
             {"uhdFrameRate", QString::fromStdString(t.uhd_frame_rate)},
+            {"avchdFrameRate", QString::fromStdString(t.avchd_frame_rate)},
             {"dvdFrameRate", QString::fromStdString(t.dvd_frame_rate)},
             {"blurayResolution", QString::fromStdString(t.resolution)},
             {"uhdResolution", QString::fromStdString(t.uhd_resolution)},
+            {"avchdResolution", QString::fromStdString(t.avchd_resolution)},
             {"dvdResolution", QString::fromStdString(t.dvd_resolution)},
             {"blurayAspectRatio", QString::fromStdString(t.aspect_ratio)},
             {"uhdAspectRatio", QString::fromStdString(t.uhd_aspect_ratio)},
+            {"avchdAspectRatio", QString::fromStdString(t.avchd_aspect_ratio)},
             {"dvdAspectRatio", QString::fromStdString(t.dvd_aspect_ratio)},
             {"blurayEncoding", encoding_json(t.encoding)}, {"uhdEncoding", encoding_json(t.uhd_encoding)},
-            {"dvdEncoding", encoding_json(t.dvd_encoding)}, {"forceReencode", t.force_reencode},
+            {"avchdEncoding", encoding_json(t.avchd_encoding)}, {"dvdEncoding", encoding_json(t.dvd_encoding)}, {"forceReencode", t.force_reencode},
+            {"encodingWorker", QString::fromStdString(t.encoding_worker)}, {"encodingWorkerMode", static_cast<int>(t.encoding_worker_mode)},
             {"menuButtonActions", actions_json(t.menu_button_actions)},
             {"prohibitedUserOperations", user_operations_json(t.prohibited_user_operations)}};
 }
@@ -868,17 +905,23 @@ Title title_from_json(QWidget* parent, const QJsonValue& v, bool* cancelled, int
     }
     t.frame_rate = o.value("blurayFrameRate").toString("inherit").toStdString();
     t.uhd_frame_rate = o.value("uhdFrameRate").toString("inherit").toStdString();
+    t.avchd_frame_rate = o.value("avchdFrameRate").toString("inherit").toStdString();
     t.dvd_frame_rate = o.value("dvdFrameRate").toString("inherit").toStdString();
     t.resolution = o.value("blurayResolution").toString("auto").toStdString();
     t.uhd_resolution = o.value("uhdResolution").toString("auto").toStdString();
+    t.avchd_resolution = o.value("avchdResolution").toString("auto").toStdString();
     t.dvd_resolution = o.value("dvdResolution").toString("auto").toStdString();
     t.aspect_ratio = o.value("blurayAspectRatio").toString("auto").toStdString();
     t.uhd_aspect_ratio = o.value("uhdAspectRatio").toString("auto").toStdString();
+    t.avchd_aspect_ratio = o.value("avchdAspectRatio").toString("auto").toStdString();
     t.dvd_aspect_ratio = o.value("dvdAspectRatio").toString("auto").toStdString();
     t.encoding = encoding_from_json(o.contains("blurayEncoding") ? o.value("blurayEncoding") : o.value("encoding"), EncodingProfile{});
     t.uhd_encoding = o.contains("uhdEncoding") ? encoding_from_json(o.value("uhdEncoding"), default_uhd_encoding_profile()) : default_uhd_encoding_profile();
+    t.avchd_encoding = o.contains("avchdEncoding") ? encoding_from_json(o.value("avchdEncoding"), default_avchd_encoding_profile()) : default_avchd_encoding_profile();
     t.dvd_encoding = o.contains("dvdEncoding") ? encoding_from_json(o.value("dvdEncoding"), default_dvd_encoding_profile()) : default_dvd_encoding_profile();
     t.force_reencode = o.value("forceReencode").toBool(false);
+    t.encoding_worker = o.value("encodingWorker").toString().toStdString();
+    t.encoding_worker_mode = static_cast<EncodingWorkerAffinityMode>(o.value("encodingWorkerMode").toInt(static_cast<int>(EncodingWorkerAffinityMode::Automatic)));
     if (o.contains("menuButtonActions")) t.menu_button_actions = actions_from_json(o.value("menuButtonActions"));
     if (o.contains("prohibitedUserOperations")) t.prohibited_user_operations = user_operations_from_json(o.value("prohibitedUserOperations"));
     return t;
@@ -894,7 +937,6 @@ bool save_project_file(QWidget*, const Project& project, const QString& file_nam
         QJsonObject root{{"format", "BDMV Author Project"}, {"version", kProjectFormatVersion},
                          {"volumeLabel", QString::fromStdString(project.volume_label)},
                          {"outputImage", path_qstring(project.output_image)},
-                         {"workDirectory", path_qstring(project.work_directory)},
                          {"target", target_name(project.target)},
                          {"discCapacityBytes", QString::number(static_cast<qulonglong>(project.disc_capacity_bytes))},
                          {"automaticVideoBitrate", project.automatic_video_bitrate},
@@ -941,7 +983,9 @@ std::optional<Project> load_project_file(QWidget* parent, const QString& file_na
         Project p;
         p.volume_label = o.value("volumeLabel").toString("BLURAY").toStdString();
         p.output_image = fs_path(o.value("outputImage").toString());
-        p.work_directory = fs_path(o.value("workDirectory").toString());
+        // Temporary/work locations are runtime application settings. Older
+        // project files may contain workDirectory; intentionally ignore it.
+        p.work_directory.clear();
         p.target = target_from_name(o.value("target").toString("bluray-1080p"));
         p.disc_capacity_bytes = default_disc_capacity_bytes(p.target);
         p.automatic_video_bitrate = version >= 22 ? o.value("automaticVideoBitrate").toBool(true) : false;

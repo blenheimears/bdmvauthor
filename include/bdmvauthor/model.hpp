@@ -36,11 +36,15 @@ inline constexpr int kProjectDesignHeight = 2160;
 inline constexpr int kBdGraphicsWidth = 1920;
 inline constexpr int kBdGraphicsHeight = 1080;
 
-enum class DiscTarget { BluRay1080, UltraHdBluRay2160, DvdVideo480p };
+// Keep the original persisted numeric values stable: GUI defaults store this
+// enum as an integer in QSettings. AVCHD is appended rather than inserted so
+// pre-0.1.165 DVD defaults (value 2) continue to load as DVD-Video.
+enum class DiscTarget { BluRay1080 = 0, UltraHdBluRay2160 = 1, DvdVideo480p = 2, Avchd = 3 };
 
 inline constexpr std::uint64_t default_disc_capacity_bytes(DiscTarget target) {
     switch (target) {
         case DiscTarget::DvdVideo480p: return 4700000000ULL;
+        case DiscTarget::Avchd: return 4700000000ULL;
         case DiscTarget::BluRay1080: return 25000000000ULL;
         case DiscTarget::UltraHdBluRay2160: return 50000000000ULL;
     }
@@ -49,8 +53,18 @@ inline constexpr std::uint64_t default_disc_capacity_bytes(DiscTarget target) {
 
 inline constexpr bool disc_capacity_is_unlimited(std::uint64_t bytes) { return bytes == 0ULL; }
 
-enum class AudioCodec { Ac3, Lpcm, Dca, TrueHdAc3 };
-enum class VideoCodec { X264, Mpeg2, Hevc };
+enum class AudioCodec { Ac3, Lpcm, Dca, TrueHdAc3, Libhdma };
+enum class VideoCodec { X264=0, Mpeg2=1, Hevc=2, Vc1=3, H264Hardware=4, HevcHardware=5 };
+
+inline constexpr bool video_codec_is_hardware(VideoCodec codec) {
+    return codec == VideoCodec::H264Hardware || codec == VideoCodec::HevcHardware;
+}
+inline constexpr bool video_codec_is_h264(VideoCodec codec) {
+    return codec == VideoCodec::X264 || codec == VideoCodec::H264Hardware;
+}
+inline constexpr bool video_codec_is_hevc(VideoCodec codec) {
+    return codec == VideoCodec::Hevc || codec == VideoCodec::HevcHardware;
+}
 
 struct TargetGeometry {
     int video_width;
@@ -63,6 +77,7 @@ inline constexpr TargetGeometry target_geometry(DiscTarget target) {
     switch (target) {
         case DiscTarget::UltraHdBluRay2160: return {3840,2160,1920,1080};
         case DiscTarget::DvdVideo480p: return {720,480,720,480};
+        case DiscTarget::Avchd: return {1920,1080,1920,1080};
         case DiscTarget::BluRay1080: return {1920,1080,1920,1080};
     }
     return {1920,1080,1920,1080};
@@ -76,9 +91,12 @@ inline constexpr bool target_is_uhd(DiscTarget target) {
 inline constexpr bool target_is_dvd(DiscTarget target) {
     return target == DiscTarget::DvdVideo480p;
 }
+inline constexpr bool target_is_avchd(DiscTarget target) {
+    return target == DiscTarget::Avchd;
+}
 
 inline constexpr bool audio_codec_has_configurable_bitrate(AudioCodec codec) {
-    return codec != AudioCodec::Lpcm;
+    return codec != AudioCodec::Lpcm && codec != AudioCodec::Libhdma;
 }
 
 inline int maximum_keyframe_interval_for_rate(DiscTarget target, VideoCodec codec, double frame_rate, bool dvd_pal = false) {
@@ -99,7 +117,12 @@ struct EncodingProfile {
     int video_max_bitrate_kbps = 40000;
     std::string x264_preset = "medium";
     std::string x265_preset = "medium";
+    // vc1enc speed profile. "normal" uses the encoder default; "fast" maps to --fast.
+    std::string vc1_preset = "normal";
     bool two_pass = false;
+    // x264 already enables its fast first pass by default. x265 normally uses
+    // a slow first pass, so request its turbo mode explicitly when enabled.
+    bool fast_first_pass = true;
     // 0 keeps BDMV Author's codec/timing-specific historical default. A
     // positive value requests an exact GOP/keyframe interval in encoded frames,
     // subject to the selected disc standard's maximum GOP length.
@@ -117,11 +140,17 @@ struct EncodingProfile {
     // in the structured fields above and cannot be overridden here.
     std::string x264_advanced_options;
     std::string x265_advanced_options;
+    // FFmpeg hardware encoder-private options. These remain project-level
+    // codec settings; the selected hardware API/backend is application state.
+    std::string h264_hardware_advanced_options;
+    std::string hevc_hardware_advanced_options;
     std::string mpeg2_advanced_options;
+    std::string vc1_advanced_options;
     std::string ac3_advanced_options;
     std::string dca_advanced_options;
     std::string lpcm_advanced_options;
     std::string truehd_advanced_options;
+    std::string hdma_advanced_options;
 };
 
 struct AdvancedCodecOption {
@@ -168,8 +197,11 @@ inline std::string normalized_codec_option_name(std::string name) {
 inline const std::string& advanced_video_options_for_codec(const EncodingProfile& e) {
     switch(e.video_codec){
         case VideoCodec::X264:return e.x264_advanced_options;
+        case VideoCodec::H264Hardware:return e.h264_hardware_advanced_options;
         case VideoCodec::Hevc:return e.x265_advanced_options;
+        case VideoCodec::HevcHardware:return e.hevc_hardware_advanced_options;
         case VideoCodec::Mpeg2:return e.mpeg2_advanced_options;
+        case VideoCodec::Vc1:return e.vc1_advanced_options;
     }
     return e.x264_advanced_options;
 }
@@ -182,6 +214,7 @@ inline const std::string& advanced_audio_options_for_codec(const EncodingProfile
         case AudioCodec::Dca:return e.dca_advanced_options;
         case AudioCodec::Lpcm:return e.lpcm_advanced_options;
         case AudioCodec::TrueHdAc3:return e.truehd_advanced_options;
+        case AudioCodec::Libhdma:return e.hdma_advanced_options;
     }
     return e.ac3_advanced_options;
 }
@@ -204,9 +237,11 @@ inline void validate_advanced_video_options(const EncodingProfile& e, DiscTarget
     const auto options=parse_advanced_codec_options(advanced_video_options_for_codec(e));
     for(const auto& o:options){
         const auto n=normalized_codec_option_name(o.name);
-        if(codec_option_name_in(n,{"c:v","codec","vcodec","codec:v","b:v","bitrate","vbv-maxrate","vbv-bufsize","maxrate","minrate","bufsize","g","keyint","min-keyint","scenecut","open-gop","profile","profile:v","level","level:v","pix-fmt","pixel-format","output-depth","input-depth","bit-depth","chroma-format","fps","force-cfr","tff","bff","interlaced","fake-interlaced","sar","aspect","s","vf","filter:v","colorprim","color-primaries","transfer","color-trc","colormatrix","colorspace","range","color-range","bluray-compat","uhd-bd","nal-hrd","hrd","aud","repeat-headers","output","o","pass","stats","demuxer","input","i","map","an","sn","dn","y","hide-banner","loglevel","progress","f"}))
+        if (codec_option_name_in(n,{"slow-firstpass","no-slow-firstpass","fastfirstpass","fast-first-pass"}))
+            throw std::runtime_error("advanced video option '"+o.name+"' conflicts with the first-pass speed control; use Fast first pass instead");
+        if(codec_option_name_in(n,{"c:v","codec","vcodec","codec:v","b:v","bitrate","vbv-maxrate","vbv-bufsize","maxrate","minrate","bufsize","buffer-size","es-out","g","keyint","min-keyint","scenecut","open-gop","profile","profile:v","level","level:v","pix-fmt","pixel-format","output-depth","input-depth","bit-depth","chroma-format","fps","force-cfr","tff","bff","interlaced","fake-interlaced","sar","aspect","s","vf","filter:v","colorprim","color-primaries","transfer","color-trc","colormatrix","colorspace","range","color-range","bluray-compat","uhd-bd","nal-hrd","hrd","aud","repeat-headers","output","o","pass","pass-stats","pass1-output","stats","stats-file","demuxer","input","i","map","an","sn","dn","y","hide-banner","loglevel","progress","format","container","f"}))
             throw std::runtime_error("advanced video option '"+o.name+"' controls a disc-spec parameter; use BDMV Author's normal format/codec controls instead");
-        if(e.video_codec==VideoCodec::X264&&(n=="bframes"||n=="ref")){
+        if(video_codec_is_h264(e.video_codec)&&(n=="bframes"||n=="ref")){
             if(!o.has_value)throw std::runtime_error("advanced x264 option '"+o.name+"' requires an integer value");
             int value=0;if(!parse_integer_exact(o.value,value))throw std::runtime_error("advanced x264 option '"+o.name+"' requires an integer value");
             if(n=="bframes"&&(value<0||value>3))throw std::runtime_error("Blu-ray x264 bframes must be 0..3");
@@ -221,7 +256,7 @@ inline void validate_advanced_audio_options(const EncodingProfile& e, DiscTarget
     const auto options=parse_advanced_codec_options(advanced_audio_options_for_codec(e));
     for(const auto& o:options){
         const auto n=normalized_codec_option_name(o.name);
-        if(codec_option_name_in(n,{"c:a","codec","acodec","codec:a","b:a","bitrate","ar","sample-rate","ac","channels","channel-layout","sample-fmt","sample-format","f","format","strict","i","map","y","hide-banner","loglevel","progress","output","o"}))
+        if(codec_option_name_in(n,{"c:a","codec","acodec","codec:a","b:a","bitrate","ar","sample-rate","ac","channels","channel-layout","sample-fmt","sample-format","f","format","strict","i","map","y","hide-banner","loglevel","progress","output","o","raw-pcm","bit-depth","core-side","side-core","lossy","mode","overwrite","no-progress","progress","input-fps"}))
             throw std::runtime_error("advanced audio option '"+o.name+"' controls a disc-spec parameter; use BDMV Author's normal codec/bitrate controls instead");
     }
 }
@@ -241,6 +276,19 @@ inline EncodingProfile default_uhd_encoding_profile() {
     return e;
 }
 
+inline EncodingProfile default_avchd_encoding_profile() {
+    EncodingProfile e;
+    e.video_codec = VideoCodec::X264;
+    e.video_bitrate_kbps = 16000;
+    e.video_min_bitrate_kbps = 0;
+    e.video_max_bitrate_kbps = 18000;
+    e.audio_codec = AudioCodec::Ac3;
+    e.ac3_bitrate_kbps = 448;
+    e.lpcm_sample_rate_hz = 48000;
+    e.lpcm_bit_depth = 16;
+    return e;
+}
+
 inline EncodingProfile default_dvd_encoding_profile() {
     EncodingProfile e;
     e.video_codec = VideoCodec::Mpeg2;
@@ -255,15 +303,22 @@ inline EncodingProfile default_dvd_encoding_profile() {
 }
 
 inline constexpr bool video_codec_allowed_for_target(DiscTarget target, VideoCodec codec) {
+    // Disc-format legality is independent of where the encoder executable is
+    // installed. Worker/tool capability is resolved separately by the scheduler.
     switch (target) {
-        case DiscTarget::BluRay1080: return codec == VideoCodec::X264 || codec == VideoCodec::Mpeg2;
-        case DiscTarget::UltraHdBluRay2160: return codec == VideoCodec::Hevc || codec == VideoCodec::X264;
+        case DiscTarget::BluRay1080:
+            return video_codec_is_h264(codec) || codec == VideoCodec::Mpeg2 || codec == VideoCodec::Vc1;
+        case DiscTarget::UltraHdBluRay2160: return video_codec_is_hevc(codec) || video_codec_is_h264(codec);
+        case DiscTarget::Avchd: return video_codec_is_h264(codec);
         case DiscTarget::DvdVideo480p: return codec == VideoCodec::Mpeg2;
     }
     return false;
 }
 inline constexpr bool audio_codec_allowed_for_target(DiscTarget target, AudioCodec codec) {
-    if (target == DiscTarget::DvdVideo480p) return codec == AudioCodec::Ac3 || codec == AudioCodec::Lpcm;
+    // libhdma/hdmaenc may live on a remote worker (or be installed externally
+    // on Local), so build-time bundling must never affect format validation.
+    if (target == DiscTarget::DvdVideo480p || target == DiscTarget::Avchd)
+        return codec == AudioCodec::Ac3 || codec == AudioCodec::Lpcm;
     return true;
 }
 inline constexpr int video_codec_min_bitrate_kbps(DiscTarget, VideoCodec) {
@@ -272,10 +327,11 @@ inline constexpr int video_codec_min_bitrate_kbps(DiscTarget, VideoCodec) {
     return 0;
 }
 inline constexpr int video_codec_max_bitrate_kbps(DiscTarget target, VideoCodec codec) {
-    if (target == DiscTarget::UltraHdBluRay2160 && codec == VideoCodec::X264) return 40000;
+    if (target == DiscTarget::UltraHdBluRay2160 && video_codec_is_h264(codec)) return 40000;
     switch (target) {
         case DiscTarget::UltraHdBluRay2160: return 86000;
         case DiscTarget::DvdVideo480p: return 9800;
+        case DiscTarget::Avchd: return 18000;
         case DiscTarget::BluRay1080: return 40000;
     }
     return 40000;
@@ -284,22 +340,34 @@ inline constexpr int target_max_video_bitrate_kbps(DiscTarget target) {
     switch (target) {
         case DiscTarget::UltraHdBluRay2160: return 86000;
         case DiscTarget::DvdVideo480p: return 9800;
+        case DiscTarget::Avchd: return 18000;
         case DiscTarget::BluRay1080: return 40000;
     }
     return 40000;
 }
+inline constexpr bool target_supports_ac3_71_extension(DiscTarget target) {
+    // The dependent E-AC-3 7.1 extension is a Blu-ray/UHD feature.
+    // DVD-Video and AVCHD must remain plain AC-3 for Dolby Digital output.
+    return target == DiscTarget::BluRay1080 || target == DiscTarget::UltraHdBluRay2160;
+}
 inline constexpr int target_max_ac3_bitrate_kbps(DiscTarget target) {
     return target == DiscTarget::DvdVideo480p ? 448 : 640;
+}
+inline constexpr int target_max_ac3_71_bitrate_kbps(DiscTarget target) {
+    return target_supports_ac3_71_extension(target) ? 1664
+         : target_max_ac3_bitrate_kbps(target);
 }
 inline constexpr int target_max_combined_av_bitrate_kbps(DiscTarget target) {
     switch (target) {
         case DiscTarget::BluRay1080: return 48000;
         case DiscTarget::UltraHdBluRay2160: return 70000;
+        case DiscTarget::Avchd: return 18000;
         case DiscTarget::DvdVideo480p: return 10080;
     }
     return 48000;
 }
 inline constexpr bool lpcm_sample_rate_allowed_for_target(DiscTarget target, int sample_rate_hz) {
+    if (target == DiscTarget::Avchd) return sample_rate_hz == 48000;
     if (target == DiscTarget::DvdVideo480p) return sample_rate_hz == 48000 || sample_rate_hz == 96000;
     return sample_rate_hz == 48000 || sample_rate_hz == 96000 || sample_rate_hz == 192000;
 }
@@ -311,11 +379,12 @@ inline constexpr bool lpcm_bit_depth_supported_by_encoder(int bit_depth) {
 }
 inline constexpr int lpcm_max_channels_for_target(DiscTarget target, int sample_rate_hz) {
     if (target == DiscTarget::DvdVideo480p) return 2; // current mplex backend supports stereo LPCM safely
+    if (target == DiscTarget::Avchd) return 8;
     return sample_rate_hz == 192000 ? 6 : 8;
 }
 
 inline constexpr bool lossless_audio_codec(AudioCodec codec) {
-    return codec == AudioCodec::Lpcm || codec == AudioCodec::TrueHdAc3;
+    return codec == AudioCodec::Lpcm || codec == AudioCodec::TrueHdAc3 || codec == AudioCodec::Libhdma;
 }
 inline constexpr bool lossless_sample_rate_allowed_for_target(DiscTarget target, int sample_rate_hz) {
     if (sample_rate_hz == 0) return true;
@@ -326,14 +395,14 @@ inline constexpr bool lossless_bit_depth_supported_by_encoder(int bit_depth) {
 }
 inline int resolved_lossless_sample_rate_hz(DiscTarget target, int configured_hz, int source_hz) {
     if (configured_hz > 0) return configured_hz;
-    if (target == DiscTarget::DvdVideo480p) return 48000;
+    if (target == DiscTarget::DvdVideo480p || target == DiscTarget::Avchd) return 48000;
     const int source = source_hz > 0 ? source_hz : 48000;
     for (int rate : {48000, 96000, 192000}) if (source <= rate) return rate;
     throw std::runtime_error("source audio sample rate exceeds the maximum supported Blu-ray lossless rate of 192 kHz");
 }
 inline int resolved_lossless_bit_depth(DiscTarget target, int configured_bits, int source_bits) {
     if (configured_bits > 0) return configured_bits;
-    if (target == DiscTarget::DvdVideo480p) return 16;
+    if (target == DiscTarget::DvdVideo480p || target == DiscTarget::Avchd) return 16;
     const int source = source_bits > 0 ? source_bits : 16;
     if (source <= 16) return 16;
     if (source <= 24) return 24;
@@ -363,6 +432,7 @@ inline void copy_audio_encoding_settings(EncodingProfile& destination, const Enc
     destination.dca_advanced_options = source.dca_advanced_options;
     destination.lpcm_advanced_options = source.lpcm_advanced_options;
     destination.truehd_advanced_options = source.truehd_advanced_options;
+    destination.hdma_advanced_options = source.hdma_advanced_options;
 }
 
 struct Rect { int x=0, y=0, width=0, height=0; };
@@ -498,20 +568,35 @@ struct ButtonStyle {
     ButtonStateStyle activated{{180,225,255,255},{20,20,20,220},{180,225,255,255},10};
 };
 
+enum class EncodingWorkerAffinityMode {
+    Automatic = 0,
+    Preferred = 1,
+    Required = 2
+};
+
 struct AudioStreamSettings {
     // 0-based ordinal within the source file's audio streams.
     int source_ordinal = 0;
     // Empty means preserve the source language tag (with the legacy first-track
     // title fallback used when the source has no language tag).
     std::string language;
+    // When true this source audio stream is omitted entirely from the authored
+    // title before bitrate planning, compliance analysis, encoding, and muxing.
+    bool removed = false;
     // False preserves the historical behavior: remux a compliant source track,
     // otherwise encode it with the title's fallback audio settings.
     bool override_encoding = false;
     // 0 preserves the source channel count. Positive values request a downmix
     // to that many channels; upmixing is intentionally rejected.
     int output_channels = 0;
+    // Encoding-worker assignment. Empty/Automatic means normal scheduling.
+    // Preferred tries the named worker first and may fall through to another
+    // compatible worker. Required never migrates away from the named worker.
+    std::string encoding_worker;
+    EncodingWorkerAffinityMode encoding_worker_mode = EncodingWorkerAffinityMode::Automatic;
     EncodingProfile encoding;
     EncodingProfile uhd_encoding = default_uhd_encoding_profile();
+    EncodingProfile avchd_encoding = default_avchd_encoding_profile();
     EncodingProfile dvd_encoding = default_dvd_encoding_profile();
 };
 
@@ -560,6 +645,10 @@ inline SubtitleStyle default_new_project_subtitle_style() {
 
 struct SubtitleStreamSettings {
     int source_ordinal = 0;
+    // When true this embedded subtitle stream is omitted entirely from the
+    // authored title. Attached subtitle files remain removable through their
+    // existing Streams-table Remove selected control.
+    bool removed = false;
     // Empty means preserve the source subtitle language tag.
     std::string language;
     SubtitleStyle style;
@@ -575,6 +664,7 @@ struct ExternalSubtitle {
 inline EncodingProfile& encoding_for_target(AudioStreamSettings& stream, DiscTarget target) {
     switch (target) {
         case DiscTarget::UltraHdBluRay2160: return stream.uhd_encoding;
+        case DiscTarget::Avchd: return stream.avchd_encoding;
         case DiscTarget::DvdVideo480p: return stream.dvd_encoding;
         case DiscTarget::BluRay1080: return stream.encoding;
     }
@@ -608,21 +698,29 @@ struct Title {
     // frame-rate selection; "auto" independently matches this title's source.
     std::string frame_rate = "inherit";
     std::string uhd_frame_rate = "inherit";
+    std::string avchd_frame_rate = "inherit";
     std::string dvd_frame_rate = "inherit";
     // Per-target raster/aspect choices. "auto" selects the legal mode nearest
     // the source raster and display aspect; exact ties prefer scaling up.
     std::string resolution = "auto";
     std::string uhd_resolution = "auto";
+    std::string avchd_resolution = "auto";
     std::string dvd_resolution = "auto";
     std::string aspect_ratio = "auto";
     std::string uhd_aspect_ratio = "auto";
+    std::string avchd_aspect_ratio = "auto";
     std::string dvd_aspect_ratio = "auto";
     // Separate fallback profiles let one project be rendered as either a
     // standard 1080p Blu-ray or an Ultra HD Blu-ray without losing settings.
     EncodingProfile encoding;
     EncodingProfile uhd_encoding = default_uhd_encoding_profile();
+    EncodingProfile avchd_encoding = default_avchd_encoding_profile();
     EncodingProfile dvd_encoding = default_dvd_encoding_profile();
     bool force_reencode = false;
+    // Empty/Automatic means normal scheduling. Audio streams inherit this
+    // assignment unless they specify their own worker/mode.
+    std::string encoding_worker;
+    EncodingWorkerAffinityMode encoding_worker_mode = EncodingWorkerAffinityMode::Automatic;
     // Empty means the format-specific default for the player's Menu button:
     // return to the top/main menu when one exists, or stop on a menu-less disc.
     // A non-empty sequence overrides that default for this title.
@@ -644,10 +742,19 @@ inline const SubtitleStreamSettings* find_subtitle_stream_settings(const Title& 
         [source_ordinal](const SubtitleStreamSettings& s) { return s.source_ordinal == source_ordinal; });
     return it == title.subtitle_stream_settings.end() ? nullptr : &*it;
 }
+inline bool audio_stream_removed(const Title& title, int source_ordinal) {
+    const auto* stream = find_audio_stream_settings(title, source_ordinal);
+    return stream && stream->removed;
+}
+inline bool subtitle_stream_removed(const Title& title, int source_ordinal) {
+    const auto* stream = find_subtitle_stream_settings(title, source_ordinal);
+    return stream && stream->removed;
+}
 inline EncodingProfile effective_audio_encoding_for_stream(const Title& title, DiscTarget target, int source_ordinal) {
     EncodingProfile effective;
     switch (target) {
         case DiscTarget::UltraHdBluRay2160: effective = title.uhd_encoding; break;
+        case DiscTarget::Avchd: effective = title.avchd_encoding; break;
         case DiscTarget::DvdVideo480p: effective = title.dvd_encoding; break;
         case DiscTarget::BluRay1080: effective = title.encoding; break;
     }
@@ -659,6 +766,7 @@ inline EncodingProfile effective_audio_encoding_for_stream(const Title& title, D
 inline std::string& frame_rate_for_target(Title& title, DiscTarget target) {
     switch (target) {
         case DiscTarget::UltraHdBluRay2160: return title.uhd_frame_rate;
+        case DiscTarget::Avchd: return title.avchd_frame_rate;
         case DiscTarget::DvdVideo480p: return title.dvd_frame_rate;
         case DiscTarget::BluRay1080: return title.frame_rate;
     }
@@ -667,6 +775,7 @@ inline std::string& frame_rate_for_target(Title& title, DiscTarget target) {
 inline const std::string& frame_rate_for_target(const Title& title, DiscTarget target) {
     switch (target) {
         case DiscTarget::UltraHdBluRay2160: return title.uhd_frame_rate;
+        case DiscTarget::Avchd: return title.avchd_frame_rate;
         case DiscTarget::DvdVideo480p: return title.dvd_frame_rate;
         case DiscTarget::BluRay1080: return title.frame_rate;
     }
@@ -675,6 +784,7 @@ inline const std::string& frame_rate_for_target(const Title& title, DiscTarget t
 inline std::string& resolution_for_target(Title& title, DiscTarget target) {
     switch (target) {
         case DiscTarget::UltraHdBluRay2160: return title.uhd_resolution;
+        case DiscTarget::Avchd: return title.avchd_resolution;
         case DiscTarget::DvdVideo480p: return title.dvd_resolution;
         case DiscTarget::BluRay1080: return title.resolution;
     }
@@ -683,6 +793,7 @@ inline std::string& resolution_for_target(Title& title, DiscTarget target) {
 inline const std::string& resolution_for_target(const Title& title, DiscTarget target) {
     switch (target) {
         case DiscTarget::UltraHdBluRay2160: return title.uhd_resolution;
+        case DiscTarget::Avchd: return title.avchd_resolution;
         case DiscTarget::DvdVideo480p: return title.dvd_resolution;
         case DiscTarget::BluRay1080: return title.resolution;
     }
@@ -691,6 +802,7 @@ inline const std::string& resolution_for_target(const Title& title, DiscTarget t
 inline std::string& aspect_ratio_for_target(Title& title, DiscTarget target) {
     switch (target) {
         case DiscTarget::UltraHdBluRay2160: return title.uhd_aspect_ratio;
+        case DiscTarget::Avchd: return title.avchd_aspect_ratio;
         case DiscTarget::DvdVideo480p: return title.dvd_aspect_ratio;
         case DiscTarget::BluRay1080: return title.aspect_ratio;
     }
@@ -699,6 +811,7 @@ inline std::string& aspect_ratio_for_target(Title& title, DiscTarget target) {
 inline const std::string& aspect_ratio_for_target(const Title& title, DiscTarget target) {
     switch (target) {
         case DiscTarget::UltraHdBluRay2160: return title.uhd_aspect_ratio;
+        case DiscTarget::Avchd: return title.avchd_aspect_ratio;
         case DiscTarget::DvdVideo480p: return title.dvd_aspect_ratio;
         case DiscTarget::BluRay1080: return title.aspect_ratio;
     }
@@ -767,6 +880,10 @@ struct Menu {
     EncodingProfile encoding;
     EncodingProfile uhd_encoding = default_uhd_encoding_profile();
     EncodingProfile dvd_encoding = default_dvd_encoding_profile();
+    // Empty/Automatic means normal scheduling. Submenus that inherit encoding
+    // also inherit this worker assignment.
+    std::string encoding_worker;
+    EncodingWorkerAffinityMode encoding_worker_mode = EncodingWorkerAffinityMode::Automatic;
 
     bool auto_back_button = true;
     MenuButton back_button = [] {
@@ -783,6 +900,7 @@ struct Menu {
 inline const EncodingProfile& encoding_for_target(const Title& title, DiscTarget target) {
     switch (target) {
         case DiscTarget::UltraHdBluRay2160: return title.uhd_encoding;
+        case DiscTarget::Avchd: return title.avchd_encoding;
         case DiscTarget::DvdVideo480p: return title.dvd_encoding;
         case DiscTarget::BluRay1080: return title.encoding;
     }
@@ -791,6 +909,7 @@ inline const EncodingProfile& encoding_for_target(const Title& title, DiscTarget
 inline EncodingProfile& encoding_for_target(Title& title, DiscTarget target) {
     switch (target) {
         case DiscTarget::UltraHdBluRay2160: return title.uhd_encoding;
+        case DiscTarget::Avchd: return title.avchd_encoding;
         case DiscTarget::DvdVideo480p: return title.dvd_encoding;
         case DiscTarget::BluRay1080: return title.encoding;
     }
@@ -799,6 +918,7 @@ inline EncodingProfile& encoding_for_target(Title& title, DiscTarget target) {
 inline const EncodingProfile& encoding_for_target(const Menu& menu, DiscTarget target) {
     switch (target) {
         case DiscTarget::UltraHdBluRay2160: return menu.uhd_encoding;
+        case DiscTarget::Avchd: return menu.encoding;
         case DiscTarget::DvdVideo480p: return menu.dvd_encoding;
         case DiscTarget::BluRay1080: return menu.encoding;
     }
@@ -807,6 +927,7 @@ inline const EncodingProfile& encoding_for_target(const Menu& menu, DiscTarget t
 inline EncodingProfile& encoding_for_target(Menu& menu, DiscTarget target) {
     switch (target) {
         case DiscTarget::UltraHdBluRay2160: return menu.uhd_encoding;
+        case DiscTarget::Avchd: return menu.encoding;
         case DiscTarget::DvdVideo480p: return menu.dvd_encoding;
         case DiscTarget::BluRay1080: return menu.encoding;
     }
@@ -978,6 +1099,7 @@ inline bool is_default_menuless_startup_sequence(std::span<const NavigationActio
 inline const std::string& menu_resolution_for_target(const Project& project, DiscTarget target) {
     switch (target) {
         case DiscTarget::UltraHdBluRay2160: return project.menu_uhd_resolution;
+        case DiscTarget::Avchd: return project.menu_resolution;
         case DiscTarget::DvdVideo480p: return project.menu_dvd_resolution;
         case DiscTarget::BluRay1080: return project.menu_resolution;
     }
@@ -989,6 +1111,7 @@ inline std::string& menu_resolution_for_target(Project& project, DiscTarget targ
 inline const std::string& menu_aspect_ratio_for_target(const Project& project, DiscTarget target) {
     switch (target) {
         case DiscTarget::UltraHdBluRay2160: return project.menu_uhd_aspect_ratio;
+        case DiscTarget::Avchd: return project.menu_aspect_ratio;
         case DiscTarget::DvdVideo480p: return project.menu_dvd_aspect_ratio;
         case DiscTarget::BluRay1080: return project.menu_aspect_ratio;
     }
@@ -1006,12 +1129,14 @@ struct NewProjectDefaults {
     // the other formats. Zero means Unlimited.
     std::uint64_t disc_capacity_bytes = default_disc_capacity_bytes(DiscTarget::BluRay1080);
     std::uint64_t disc_uhd_capacity_bytes = default_disc_capacity_bytes(DiscTarget::UltraHdBluRay2160);
+    std::uint64_t disc_avchd_capacity_bytes = default_disc_capacity_bytes(DiscTarget::Avchd);
     std::uint64_t disc_dvd_capacity_bytes = default_disc_capacity_bytes(DiscTarget::DvdVideo480p);
     bool use_encode_cache = true;
     bool use_compliance_cache = true;
     bool force_reencode_new_titles = false;
     EncodingProfile title_encoding;
     EncodingProfile title_uhd_encoding = default_uhd_encoding_profile();
+    EncodingProfile title_avchd_encoding = default_avchd_encoding_profile();
     EncodingProfile title_dvd_encoding = default_dvd_encoding_profile();
     EncodingProfile menu_encoding;
     EncodingProfile menu_uhd_encoding = default_uhd_encoding_profile();
@@ -1037,6 +1162,7 @@ inline constexpr std::uint64_t new_project_disc_capacity_for_target(const NewPro
     switch (target) {
         case DiscTarget::BluRay1080: return defaults.disc_capacity_bytes;
         case DiscTarget::UltraHdBluRay2160: return defaults.disc_uhd_capacity_bytes;
+        case DiscTarget::Avchd: return defaults.disc_avchd_capacity_bytes;
         case DiscTarget::DvdVideo480p: return defaults.disc_dvd_capacity_bytes;
     }
     return defaults.disc_capacity_bytes;
@@ -1063,6 +1189,7 @@ inline Title make_title_from_defaults(const NewProjectDefaults& defaults) {
     Title title;
     title.encoding = defaults.title_encoding;
     title.uhd_encoding = defaults.title_uhd_encoding;
+    title.avchd_encoding = defaults.title_avchd_encoding;
     title.dvd_encoding = defaults.title_dvd_encoding;
     title.force_reencode = defaults.force_reencode_new_titles;
     title.subtitle_default_style = defaults.subtitle_style;

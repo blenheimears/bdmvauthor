@@ -226,6 +226,8 @@ std::optional<double> dts_core_actual_bitrate_from_bytes(const std::vector<std::
 BluRayStreamDecision evaluate_blu_ray_video_headers(const VideoStreamInfo& i, DiscTarget target) {
     if (target == DiscTarget::DvdVideo480p)
         return reject("DVD-Video uses its dedicated MPEG-2 encode path rather than Blu-ray passthrough compliance");
+    if (target == DiscTarget::Avchd && i.codec_name != "h264")
+        return reject("AVCHD primary video must use AVC/H.264");
     if (target == DiscTarget::UltraHdBluRay2160) {
         if (i.codec_name == "hevc") {
             const bool uhd_size = (i.width == 3840 && i.height == 2160) || (i.width == 1920 && i.height == 1080);
@@ -338,15 +340,18 @@ BluRayStreamDecision evaluate_blu_ray_video_headers(const VideoStreamInfo& i, Di
         }
         const double level_bitrate = h264_level_max_bitrate(i.h264_level_idc, i.h264_profile_idc);
         const double level_cpb = h264_level_max_cpb(i.h264_level_idc, i.h264_profile_idc);
+        const double application_bitrate_limit = target == DiscTarget::Avchd ? 18'000'000.0 : kPrimaryVideoMaxBitrate;
         if (i.h264_hrd_max_bitrate_bps <= 0.0 || level_bitrate <= 0.0 ||
-            i.h264_hrd_max_bitrate_bps > std::min(kPrimaryVideoMaxBitrate, level_bitrate) * 1.001)
-            return reject("H.264 HRD bitrate " + mbps(i.h264_hrd_max_bitrate_bps) + " Mb/s exceeds the Blu-ray or declared-level limit");
+            i.h264_hrd_max_bitrate_bps > std::min(application_bitrate_limit, level_bitrate) * 1.001)
+            return reject("H.264 HRD bitrate " + mbps(i.h264_hrd_max_bitrate_bps) + " Mb/s exceeds the selected disc target or declared-level limit");
         if (i.h264_hrd_max_cpb_bits <= 0.0 || level_cpb <= 0.0 ||
             i.h264_hrd_max_cpb_bits > std::min(kAvcMaxCpbBits, level_cpb) * 1.001)
             return reject("H.264 CPB/VBV buffer exceeds the Blu-ray or declared-level limit");
         return accept(target == DiscTarget::UltraHdBluRay2160
                           ? "AVC/H.264 1920x1080 v3 metadata/SPS/HRD checks pass; sampled packet/GOP verification is still required"
-                          : "H.264 metadata/SPS/HRD checks pass; sampled packet/GOP verification is still required",
+                          : target == DiscTarget::Avchd
+                              ? "AVCHD AVC/H.264 metadata/SPS/HRD checks pass; sampled packet/GOP verification is still required"
+                              : "H.264 metadata/SPS/HRD checks pass; sampled packet/GOP verification is still required",
                       "V_MPEG4/ISO/AVC", ".264");
     }
 
@@ -401,7 +406,9 @@ BluRayStreamDecision evaluate_blu_ray_video(const VideoStreamInfo& i, DiscTarget
             return reject("H.264 random-access interval exceeds one second in a sampled window");
         return accept(target == DiscTarget::UltraHdBluRay2160
                           ? "AVC/H.264 1920x1080 stream passes Ultra HD Blu-ray v3 header plus sampled packet/GOP checks"
-                          : "H.264 elementary stream passes Blu-ray metadata/header checks plus sampled first/middle/last packet, bitrate, B-frame and random-access checks",
+                          : target == DiscTarget::Avchd
+                              ? "AVCHD AVC/H.264 elementary stream passes header plus sampled packet/GOP checks"
+                              : "H.264 elementary stream passes Blu-ray metadata/header checks plus sampled first/middle/last packet, bitrate, B-frame and random-access checks",
                       "V_MPEG4/ISO/AVC", ".264");
     }
 
@@ -418,8 +425,10 @@ BluRayStreamDecision evaluate_blu_ray_video(const VideoStreamInfo& i, DiscTarget
                   "V_MS/VFW/WVC1", ".vc1");
 }
 
-BluRayStreamDecision evaluate_blu_ray_audio(const AudioStreamInfo& i) {
+BluRayStreamDecision evaluate_blu_ray_audio(const AudioStreamInfo& i, DiscTarget target) {
     if (!i.present) return reject("title has no audio stream");
+    if (target == DiscTarget::Avchd && i.codec_name != "ac3" && i.codec_name != "pcm_s16le" && i.codec_name != "pcm_s24le")
+        return reject("AVCHD audio must use Dolby Digital AC-3 or Linear PCM");
     if (i.codec_name == "ac3") {
         if (i.sample_rate != 48000) return reject("AC-3 sample rate is not the Blu-ray 48 kHz rate");
         if (i.channels < 1 || i.channels > 6) return reject("AC-3 has more than 5.1 channels");
@@ -452,6 +461,11 @@ BluRayStreamDecision evaluate_blu_ray_audio(const AudioStreamInfo& i) {
     }
     if (i.codec_name == "pcm_s16le" || i.codec_name == "pcm_s24le") {
         const int bits = i.bits_per_sample > 0 ? i.bits_per_sample : (i.codec_name == "pcm_s16le" ? 16 : 24);
+        if (target == DiscTarget::Avchd) {
+            if (i.sample_rate != 48000) return reject("AVCHD Linear PCM must use 48 kHz for the conservative optical-disc profile");
+            if (i.channels < 1 || i.channels > 8) return reject("AVCHD Linear PCM must use between 1 and 7.1 channels");
+            if (bits != 16) return reject("AVCHD Linear PCM is limited to 16-bit in the conservative optical-disc profile");
+        }
         if (!audio_rate_ok(i.sample_rate)) return reject("LPCM sample rate is not 48, 96, or 192 kHz");
         if (bits != 16 && bits != 20 && bits != 24) return reject("LPCM bit depth is not 16, 20, or 24 bits");
         if (i.channels < 1 || i.channels > (i.sample_rate == 192000 ? 6 : 8)) return reject("LPCM channel count exceeds the Blu-ray limit");

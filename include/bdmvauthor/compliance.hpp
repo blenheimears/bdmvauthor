@@ -65,6 +65,7 @@ struct AudioStreamInfo {
     std::string codec_name;
     std::string profile;
     std::string sample_format;
+    std::string channel_layout;
     int sample_rate = 0;
     int channels = 0;
     int bits_per_sample = 0;
@@ -86,6 +87,6 @@ std::optional<double> dts_core_actual_bitrate_from_bytes(const std::vector<std::
 
 BluRayStreamDecision evaluate_blu_ray_video_headers(const VideoStreamInfo& info, DiscTarget target = DiscTarget::BluRay1080);
 BluRayStreamDecision evaluate_blu_ray_video(const VideoStreamInfo& info, DiscTarget target = DiscTarget::BluRay1080);
-BluRayStreamDecision evaluate_blu_ray_audio(const AudioStreamInfo& info);
+BluRayStreamDecision evaluate_blu_ray_audio(const AudioStreamInfo& info, DiscTarget target = DiscTarget::BluRay1080);
 
 } // namespace bdmvauthor
