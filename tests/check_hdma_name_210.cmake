@@ -1,0 +1,18 @@
+file(READ "${SOURCE_DIR}/src/gui.cpp" GUI_SRC)
+# Local and remote discovery must not rely on brand wording that was removed
+# from libhdma's own --help output; probe stable CLI switches instead.
+if(GUI_SRC MATCHES "lossless DTS-HD MA")
+  message(FATAL_ERROR "libhdma capability probe still depends on retired trademark wording")
+endif()
+string(REGEX MATCHALL "hdma_help[.]contains[(]\"--raw-pcm\"[)]" RAW_CHECKS "${GUI_SRC}")
+list(LENGTH RAW_CHECKS RAW_COUNT)
+if(NOT RAW_COUNT EQUAL 2)
+  message(FATAL_ERROR "Both local and remote hdma probes must require --raw-pcm")
+endif()
+foreach(SW IN ITEMS sample-rate channels channel-layout bit-depth lossless)
+  string(REGEX MATCHALL "hdma_help[.]contains[(]\"--${SW}\"[)]" SW_CHECKS "${GUI_SRC}")
+  list(LENGTH SW_CHECKS SW_COUNT)
+  if(NOT SW_COUNT EQUAL 2)
+    message(FATAL_ERROR "Both local and remote hdma probes must require --${SW}")
+  endif()
+endforeach()
